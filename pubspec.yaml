@@ -28,6 +28,7 @@ environment:
 # the latest version available on pub.dev. To see which dependencies have newer
 # versions available, run `flutter pub outdated`.
 dependencies:
+  auto_size_text: ^3.0.0
   cloud_firestore: ^6.0.0
   crypto: ^3.0.6
   cupertino_icons: ^1.0.8
@@ -37,6 +38,7 @@ dependencies:
     sdk: flutter
   iconsax: ^0.0.8
   intl: ^0.20.2
+  loading_indicator: ^3.1.1
   provider: ^6.1.5+1
   shared_preferences: ^2.1.1
   url_launcher: ^6.3.2

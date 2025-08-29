@@ -6,8 +6,9 @@ import 'package:staff_app/orders/screen/orders_screen.dart';
 import 'package:staff_app/products/provider/products_management.dart';
 import 'package:staff_app/products/screen/products_management.dart';
 import 'package:staff_app/products/screen/products_screen.dart';
-import 'package:staff_app/staff_management/provider/provider.dart';
-import 'package:staff_app/staff_management/screen/staff_management.dart';
+import 'package:staff_app/settings/screens/settings.dart';
+import 'package:staff_app/order_products/provider/provider.dart';
+import 'package:staff_app/order_products/screen/staff_management.dart';
 import 'package:staff_app/theme/themeprovider.dart';
 
 class DashboardScreen extends StatelessWidget {
@@ -49,30 +50,13 @@ class DashboardScreen extends StatelessWidget {
           ],
         ),
         actions: [
-          Stack(
-            children: [
-              IconButton(
-                icon: Icon(Iconsax.notification, color: theme.iconTheme.color),
-                onPressed: () {},
+             IconButton(
+                icon: Icon(Iconsax.setting, color: theme.iconTheme.color),
+                onPressed: () {
+                  Navigator.push(context, MaterialPageRoute(builder: (context) => Settings(),));
+                },
               ),
-              Positioned(
-                right: 12,
-                top: 12,
-                child: Container(
-                  padding: const EdgeInsets.all(5),
-                  decoration: const BoxDecoration(
-                    color: Colors.red,
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Text(
-                    "3",
-                    style: TextStyle(color: Colors.white, fontSize: 10),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
+       ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
@@ -144,7 +128,7 @@ class DashboardScreen extends StatelessWidget {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (_) => const ProductsScreen(),
+                            builder: (_) => const ProductsScreen(isThisFormCustomers: false, buyername: "" ,),
                           ),
                         );
                       },
@@ -168,7 +152,7 @@ class DashboardScreen extends StatelessWidget {
                         context,
                         Iconsax.shopping_cart,
                         "Total Order Products",
-                        "${value.orders.length} (\u20B9${value.totalOrderValue.toStringAsFixed(2)})",
+                        "${value.orders.length} ",
                       ),
                     ),
                     buildStatCard(
@@ -254,11 +238,15 @@ class DashboardScreen extends StatelessWidget {
         children: [
           Icon(icon, color: theme.iconTheme.color, size: 30),
           const SizedBox(height: 12),
-          Text(
-            value,
-            style: theme.textTheme.bodyLarge?.copyWith(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
+          // Use FittedBox to shrink text if it's too long
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              value,
+              style: theme.textTheme.bodyLarge?.copyWith(
+                fontSize: 50, // max font size
+                fontWeight: FontWeight.bold,
+              ),
             ),
           ),
           const SizedBox(height: 4),

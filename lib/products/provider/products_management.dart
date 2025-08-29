@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:staff_app/order_products/provider/order.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 /// -------------------------------
@@ -30,7 +32,7 @@ class Order {
   final int quantity;
   final double total;
   final DateTime? timestamp;
-  final String color; // new field
+
   final String buyer; // new field
 
   Order({
@@ -42,7 +44,7 @@ class Order {
     required this.quantity,
     required this.total,
     this.timestamp,
-    required this.color,
+
     required this.buyer,
   });
 
@@ -59,8 +61,8 @@ class Order {
       timestamp: map['timestamp'] != null
           ? (map['timestamp'] as Timestamp).toDate()
           : null,
-      color: map['color'] ?? '',       // new field mapping
-      buyer: map['buyer'] ?? '',       // new field mapping
+
+      buyer: map['buyer'] ?? '', // new field mapping
     );
   }
 
@@ -75,7 +77,7 @@ class Order {
       'quantity': quantity,
       'total': total,
       'timestamp': timestamp != null ? Timestamp.fromDate(timestamp!) : null,
-      'color': color, // new field
+
       'buyer': buyer, // new field
     };
   }
@@ -94,8 +96,11 @@ class Product {
   String description;
   List<String> images;
   String categoryId;
+  double? hyperMarket;
+  String market;
 
   Product({
+    required this.market,
     required this.id,
     required this.name,
     required this.price,
@@ -105,10 +110,13 @@ class Product {
     required this.description,
     required this.images,
     required this.categoryId,
+    this.hyperMarket,
   });
 
   Map<String, dynamic> toMap() {
     return {
+      'market': market,
+      "hyperPrice": hyperMarket,
       'id': id,
       'name': name,
       'price': price,
@@ -122,15 +130,30 @@ class Product {
   }
 
   factory Product.fromMap(Map<String, dynamic> map) {
+    double? parseDouble(dynamic value) {
+      if (value == null) return null;
+      if (value is num) return value.toDouble();
+      if (value is String) return double.tryParse(value);
+      return null;
+    }
+
+    int parseInt(dynamic value) {
+      if (value == null) return 0;
+      if (value is int) return value;
+      if (value is String) return int.tryParse(value) ?? 0;
+      if (value is double) return value.toInt();
+      return 0;
+    }
+
     return Product(
+      market: map['market'] ?? "",
+      hyperMarket: parseDouble(map['hyperPrice']),
       id: map['id'] ?? '',
       name: map['name'] ?? '',
-      price: (map['price'] ?? 0).toDouble(),
-      offerPrice: map['offerPrice'] != null
-          ? (map['offerPrice'] as num).toDouble()
-          : null, // ✅ load offer price if exists
+      price: parseDouble(map['price']) ?? 0.0,
+      offerPrice: parseDouble(map['offerPrice']),
       unit: map['unit'] ?? '',
-      stock: map['stock'] ?? 0,
+      stock: parseInt(map['stock']),
       description: map['description'] ?? '',
       images: List<String>.from(map['images'] ?? []),
       categoryId: map['categoryId'] ?? '',
@@ -148,6 +171,73 @@ class ProductProvider extends ChangeNotifier {
     listenProducts();
     listenCategories();
     listenOrders();
+    fetchWhatsAppNumber();
+  }
+  List<Product> _selectedProducts = [];
+  Map<String, int> _cartQuantity = {}; // key = product id, value = quantity
+  Map<String, String> _cartWeight =
+      {}; // key = product id, value = weight as string
+  Map<String, String> _unitType =
+      {}; // key = product id, value = 'Kg' or 'Cartoon'
+  final Map<String, String> _weights = {};
+  List<Product> get selectedProducts => _selectedProducts;
+  final Map<String, TextEditingController> _controllers = {};
+
+  // Get or create controller for a product
+  TextEditingController weightController(String productId) {
+    if (!_controllers.containsKey(productId)) {
+      _controllers[productId] = TextEditingController(
+        text: _weights[productId] ?? '',
+      );
+    }
+    return _controllers[productId]!;
+  }
+
+  // select/deselect product
+  void toggleProductSelection(String productId) {
+    final index = _selectedProducts.indexWhere((p) => p.id == productId);
+    if (index >= 0) {
+      _selectedProducts.removeAt(index);
+    } else {
+      final product = filteredProducts.firstWhere((p) => p.id == productId);
+      _selectedProducts.add(product);
+      _unitType[productId] = 'Kg';
+      _cartQuantity[productId] = 1;
+      _cartWeight[productId] = '';
+    }
+    notifyListeners();
+  }
+
+  bool isProductSelected(String productId) =>
+      _selectedProducts.any((p) => p.id == productId);
+
+  // unit type
+  String unitType(String productId) => _unitType[productId] ?? 'Kg';
+  void setUnitType(String productId, String value) {
+    _unitType[productId] = value;
+    notifyListeners();
+  }
+
+  // quantity for cartoon
+  int quantity(String productId) => _cartQuantity[productId] ?? 1;
+  void setQuantity(String productId, int value) {
+    _cartQuantity[productId] = value;
+    notifyListeners();
+  }
+
+  // weight for kg
+  String weight(String productId) => _cartWeight[productId] ?? '';
+  void setWeight(String productId, String value) {
+    _cartWeight[productId] = value;
+    notifyListeners();
+  }
+
+  void clearSelections() {
+    _selectedProducts.clear();
+    _cartQuantity.clear();
+    _cartWeight.clear();
+    _unitType.clear();
+    notifyListeners();
   }
 
   /// DATA
@@ -156,13 +246,12 @@ class ProductProvider extends ChangeNotifier {
   final List<Category> _categories = [];
 
   List<Product> get products => List.unmodifiable(_products);
-    List<Order> get orders => List.unmodifiable(_orders);
+  List<Order> get orders => List.unmodifiable(_orders);
   List<Category> get categories => List.unmodifiable(_categories);
 
-double get totalOrderValue {
-  return _orders.fold(0.0, (sum, order) => sum + order.total);
-}
-
+  double get totalOrderValue {
+    return _orders.fold(0.0, (sum, order) => sum + order.total);
+  }
 
   /// STATE
   String searchQuery = "";
@@ -211,17 +300,41 @@ double get totalOrderValue {
     });
   }
 
-void listenOrders() {
-  _ordersSub?.cancel(); // prevent duplicate listeners
-  _ordersSub = _firestore.collection('orders').snapshots().listen((snapshot) {
-    _orders
-      ..clear()
-      ..addAll(snapshot.docs.map((doc) => Order.fromMap(doc.data(), doc.id)));
-    notifyListeners();
-  });
-}
+  void listenOrders() async {
+    _ordersSub?.cancel(); // prevent duplicate listeners
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    final userid = prefs.getString('user_id');
+    _ordersSub = _firestore
+        .collection('orders')
+        .where('salesManId', isEqualTo: userid) // filter by logged-in user
+        .snapshots()
+        .listen((snapshot) {
+          _orders
+            ..clear()
+            ..addAll(
+              snapshot.docs.map((doc) => Order.fromMap(doc.data(), doc.id)),
+            );
+          notifyListeners();
+        });
+  }
 
+  String? whatsappNumber;
 
+  void fetchWhatsAppNumber() {
+    _firestore
+        .collection('order_whatsapp')
+        .doc('main_number')
+        .get()
+        .then((doc) {
+          if (doc.exists) {
+            whatsappNumber = doc.data()?['number'] ?? '';
+            notifyListeners();
+          }
+        })
+        .catchError((error) {
+          print("Error fetching WhatsApp number: $error");
+        });
+  }
 
   /// -------------------------------
   /// LIVE LISTEN TO CATEGORIES
@@ -260,88 +373,104 @@ void listenOrders() {
   /// -------------------------------
   /// SEND ORDER TO WHATSAPP + SAVE IN FIRESTORE
   /// -------------------------------
-  Future<void> sendOrderWhatsApp(
-    Product product,
-    int qty,
-  
-    BuildContext context,   String color, String productBuyer , {
-    required String salesManId, // ✅ pass salesman id when calling
-  }) async {
-    // const phoneNumber = "97477270580";
-    const phoneNumber = "919400621538";
-    double total = product.price * qty;
+Future<void> sendOrderWhatsAppMultiple(
+  List<Map<String, dynamic>> selectedOrders,
+  BuildContext context,
+  String productBuyer, {
+  required String salesManId,
+}) async {
+  final phoneNumber = whatsappNumber;
 
-    if (product.stock < qty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("❌ Not enough stock available")),
-      );
-      return;
-    }
-
-    // -------------------------------
-    // Build WhatsApp Message
-    // -------------------------------
-    String message =
-        """
-🛒 *New Order*
-━━━━━━━━━━━━━━
-📦 *Product*: ${product.name}
-
-🏷 *Category*: ${product.categoryId}
-
-💰 *Price*: ₹${product.price} per ${product.unit}
-
-❄️ *Selected Colors*: $color
-
-🧑‍💼 *Buyer* $productBuyer
-
-🔢 *Quantity Ordered*: $qty ${product.unit}
-━━━━━━━━━━━━━━
-✅ *Total*: ₹$total
-
-📦 *Stock Left After*: ${product.stock - qty} ${product.unit}
-""";
-
-    final url = Uri.parse(
-      "https://wa.me/$phoneNumber?text=${Uri.encodeComponent(message)}",
+  if (phoneNumber == null || phoneNumber.isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("❌ WhatsApp number not available")),
     );
-
-    if (await canLaunchUrl(url)) {
-      await launchUrl(url, mode: LaunchMode.externalApplication);
-
-      // -------------------------------
-      // Update product stock
-      // -------------------------------
-      final newStock = product.stock - qty;
-      await FirebaseFirestore.instance
-          .collection('products')
-          .doc(product.id)
-          .update({'stock': newStock});
-
-      product.stock = newStock;
-      notifyListeners();
-
-      // -------------------------------
-      // Save Order in Firestore
-      // -------------------------------
-      final orderRef = FirebaseFirestore.instance.collection('orders').doc();
-      final orders = Order(
-        color: color,
-        buyer: productBuyer,
-        orderId: orderRef.id,
-        salesManId: salesManId,
-        productId: product.id,
-        productName: product.name,
-        price: product.price,
-        quantity: qty,
-        total: total,
-         timestamp: DateTime.now(),
-      );
-      await orderRef.set(orders.toMap());
-    } else {
-      throw "Could not launch WhatsApp";
-    }
+    return;
   }
+
+  double grandTotal = 0;
+  StringBuffer message = StringBuffer();
+
+  // Header
+  message.writeln("*ORDER FORM*");
+  message.writeln("━━━━━━━━━━━━━━");
+  message.writeln("No: 001            Date: ${DateTime.now().toString().split(' ')[0]}");
+  message.writeln("Customer: $productBuyer  Phone: ");
+  message.writeln("━━━━━━━━━━━━━━");
+  message.writeln();
+  message.writeln("`Item            Qty   Price   Total`"); // Table header
+
+  for (var item in selectedOrders) {
+    Product product = item["product"];
+    int qty = item["qty"];
+    String? weight = item["weight"];
+
+    double unitPrice = product.offerPrice ?? product.price;
+    double total;
+    String qtyDisplay;
+
+    if (weight != null && weight.isNotEmpty) {
+      double w = double.tryParse(weight) ?? 0;
+      total = unitPrice * w;
+      grandTotal += total;
+      qtyDisplay = "$w Kg";
+    } else {
+      total = unitPrice * qty;
+      grandTotal += total;
+      qtyDisplay = "$qty Cartoon";
+    }
+
+    // Format each row for monospace table
+    String itemName = product.name.length > 14
+        ? product.name.substring(0, 14)
+        : product.name.padRight(14);
+    String qtyText = qtyDisplay.padLeft(5);
+    String priceText = "₹${unitPrice.toStringAsFixed(0)}".padLeft(7);
+    String totalText = "₹${total.toStringAsFixed(0)}".padLeft(7);
+
+    message.writeln('`$itemName$qtyText$priceText$totalText`');
+
+    // ✅ Update stock in Firebase
+    final newStock = product.stock - qty;
+    await FirebaseFirestore.instance
+        .collection('products')
+        .doc(product.id)
+        .update({'stock': newStock});
+    product.stock = newStock;
+
+    // ✅ Save order in Firestore
+    final orderRef = FirebaseFirestore.instance.collection('orders').doc();
+    final order = Order(
+      buyer: productBuyer,
+      orderId: orderRef.id,
+      salesManId: salesManId,
+      productId: product.id,
+      productName: product.name,
+      price: unitPrice,
+      quantity: weight != null && weight.isNotEmpty
+          ? (double.tryParse(weight) ?? 0).toInt()
+          : qty,
+      total: total,
+      timestamp: DateTime.now(),
+    );
+    await orderRef.set(order.toMap());
+  }
+
+  // Footer
+  message.writeln("------------------------------------");
+  message.writeln("*Grand Total:* ₹${grandTotal.toStringAsFixed(0)}");
+
+  final url = Uri.parse(
+    "https://wa.me/$phoneNumber?text=${Uri.encodeComponent(message.toString())}",
+  );
+
+  if (await canLaunchUrl(url)) {
+    await launchUrl(url, mode: LaunchMode.externalApplication);
+    notifyListeners();
+  } else {
+    throw "Could not launch WhatsApp";
+  }
+}
 
   /// -------------------------------
   /// CLEAN UP LISTENERS

@@ -1,11 +1,16 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:staff_app/authentication/provider/authentication_provider.dart';
+import 'package:staff_app/authentication/screens/authentication_screen.dart';
+import 'package:staff_app/authentication/screens/splash_screen.dart';
 import 'package:staff_app/firebase_options.dart';
+import 'package:staff_app/order_products/provider/customer.dart';
 import 'package:staff_app/products/provider/products_management.dart';
 import 'package:staff_app/products/screen/products.dart';
 import 'package:staff_app/products/screen/products_management.dart';
-import 'package:staff_app/staff_management/provider/provider.dart';
+import 'package:staff_app/order_products/provider/provider.dart';
+
 import 'package:staff_app/theme/theme.dart';
 import 'package:staff_app/theme/themeprovider.dart';
 
@@ -18,9 +23,11 @@ void main() async {
   await themeProvider.loadThemeFromPrefs();
   runApp(MultiProvider(
     providers: [
+      ChangeNotifierProvider(create: (_) => Costomer()),
     ChangeNotifierProvider(create: (context) => ProductProvider()),
     ChangeNotifierProvider(create: (context) => StaffProvider()),
     ChangeNotifierProvider(create: (context) => ThemeProvider()), // <-- Add this
+     ChangeNotifierProvider(create: (_) => UserProvider()),
   ],
     child: const MyApp()));
 }
@@ -39,7 +46,7 @@ class MyApp extends StatelessWidget {
           theme: AppTheme.lightTheme,
           darkTheme: AppTheme.darkTheme,
           themeMode: themeProvider.themeMode, // Dynamic theme
-          home: const DashboardScreen(),
+          home: const SplashScreen(),
         );
       },
     );
