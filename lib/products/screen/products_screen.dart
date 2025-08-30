@@ -20,163 +20,203 @@ class ProductsScreen extends StatelessWidget {
   final String buyername;
   @override
   Widget build(BuildContext context) {
-    return Consumer<ProductProvider>(
-      builder: (context, provider, child) {
-        final products = provider.filteredProducts;
-        final theme = Theme.of(context);
+    return WillPopScope(
+      onWillPop: () async {
+        Provider.of<ProductProvider>(context, listen: false).clearSelections();
+        return true; // allow back navigation
+      },
+      child: Consumer<ProductProvider>(
+        builder: (context, provider, child) {
+          final products = provider.filteredProducts;
+          final theme = Theme.of(context);
 
-        return Scaffold(
-          appBar: AppBar(
-            title: const Text("Products"),
-            bottom: PreferredSize(
-              preferredSize: const Size.fromHeight(60),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 8,
-                ),
-                child: TextField(
-                  onChanged: (value) => provider.setSearchQuery(value),
-                  decoration: InputDecoration(
-                    hintText: "Search products...",
-                    prefixIcon: const Icon(Icons.search),
-                    filled: true,
-                    fillColor: theme.cardColor,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide.none,
+          return Scaffold(
+            appBar: AppBar(
+              title: const Text("Products"),
+              bottom: PreferredSize(
+                preferredSize: const Size.fromHeight(60),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                  child: TextField(
+                    onChanged: (value) => provider.setSearchQuery(value),
+                    decoration: InputDecoration(
+                      hintText: "Search products...",
+                      prefixIcon: const Icon(Icons.search),
+                      filled: true,
+                      fillColor: theme.cardColor,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
                     ),
                   ),
                 ),
               ),
             ),
-          ),
-          body: Column(
-            children: [
-              // 🔹 Category chips
-              SizedBox(
-                height: 50,
-                child: ListView.separated(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 8,
-                  ),
-                  scrollDirection: Axis.horizontal,
-                  itemCount: provider.categories.length + 1,
-                  separatorBuilder: (_, __) => const SizedBox(width: 6),
-                  itemBuilder: (context, index) {
-                    final theme = Theme.of(context);
-
-                    if (index == 0) {
-                      final isSelected = provider.selectedCategory == null;
-                      return ChoiceChip(
-                        label: const Text("All"),
-                        selected: isSelected,
-                        selectedColor: theme.colorScheme.primary,
-                        backgroundColor: theme.chipTheme.backgroundColor,
-                        labelStyle: TextStyle(
-                          color: isSelected
-                              ? theme.colorScheme.onPrimary
-                              : theme.textTheme.bodyMedium?.color,
-                        ),
-                        onSelected: (_) => provider.setCategory(null),
-                      );
-                    }
-
-                    final cat = provider.categories[index - 1];
-                    final isSelected = provider.selectedCategory == cat.name;
-
-                    return ChoiceChip(
-                      label: Text(cat.name),
-                      selected: isSelected,
-                      selectedColor: theme.colorScheme.primary,
-                      backgroundColor: theme.chipTheme.backgroundColor,
-                      labelStyle: TextStyle(
-                        color: isSelected
-                            ? theme.colorScheme.onPrimary
-                            : theme.textTheme.bodyMedium?.color,
+            body: Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: Column(
+                children: [
+                  // 🔹 Category chips
+                  SizedBox(
+                    height: 50,
+                    child: ListView.separated(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 8,
                       ),
-                      onSelected: (_) => provider.setCategory(cat.name),
-                    );
-                  },
-                ),
-              ),
+                      scrollDirection: Axis.horizontal,
+                      itemCount: provider.categories.length + 1,
+                      separatorBuilder: (_, __) => const SizedBox(width: 6),
+                      itemBuilder: (context, index) {
+                        final theme = Theme.of(context);
 
-              // 🔹 Products grid
-              Expanded(
-                child: products.isEmpty
-                    ? const Center(child: Text("No products found"))
-                    : ListView.builder(
-                        shrinkWrap: true,
-
-                        itemCount: provider.filteredProducts.length,
-                        itemBuilder: (context, index) {
-                          final product = products[index];
-                          return ProductListTile(
-                            from: isThisFormCustomers,
-                            productProvider: provider,
-                            product: product,
+                        if (index == 0) {
+                          final isSelected = provider.selectedCategory == null;
+                          return ChoiceChip(
+                            label: const Text("All"),
+                            selected: isSelected,
+                            selectedColor: theme.colorScheme.primary,
+                            backgroundColor: theme.chipTheme.backgroundColor,
+                            labelStyle: TextStyle(
+                              color: isSelected
+                                  ? theme.colorScheme.onPrimary
+                                  : theme.textTheme.bodyMedium?.color,
+                            ),
+                            onSelected: (_) => provider.setCategory(null),
                           );
-                        },
-                      ),
-              ),
-            ],
-          ),
-          floatingActionButton: Consumer<ProductProvider>(
-            builder: (context, provider, child) {
-              if (provider.selectedProducts.isEmpty) return SizedBox.shrink();
+                        }
 
-              return FloatingActionButton.extended(
-                backgroundColor: Theme.of(context).colorScheme.primary,
-                onPressed: () async {
-                  // SharedPreferences prefs =
-                  //     await SharedPreferences.getInstance();
-                  // final userid = prefs.getString('user_id');
+                        final cat = provider.categories[index - 1];
+                        final isSelected =
+                            provider.selectedCategory == cat.name;
 
-                  // for (var product in provider.selectedProducts) {
-                  //   // For now assume quantity=1, buyer/color/shop can be asked later
-                  //   await provider.sendOrderWhatsApp(
-                  //     product,
-                  //     1, // quantity
-                  //     context,
-                  //     buyername,
-                  //     salesManId: userid ?? "",
-                  //   );
-                  // }
-
-                  // provider.clearSelections(); // reset after ordering
-
-                  List<SelectedOrder> orders = provider.selectedProducts.map((
-                    element,
-                  ) {
-                    return SelectedOrder(
-                      product: element,
-                      quantity: 0, // or your actual quantity
-                      buyer: buyername,
-                    );
-                  }).toList();
-
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => OrderScreen(
-                        products: provider.selectedProducts,
-                        order: orders, // pass the list here
-                        buyername: buyername,
-                      ),
+                        return ChoiceChip(
+                          label: Text(cat.name),
+                          selected: isSelected,
+                          selectedColor: theme.colorScheme.primary,
+                          backgroundColor: theme.chipTheme.backgroundColor,
+                          labelStyle: TextStyle(
+                            color: isSelected
+                                ? theme.colorScheme.onPrimary
+                                : theme.textTheme.bodyMedium?.color,
+                          ),
+                          onSelected: (_) => provider.setCategory(cat.name),
+                        );
+                      },
                     ),
-                  );
-                },
-                icon: const Icon(Icons.shopping_cart_checkout),
-                label: Text(
-                  "Order ${provider.selectedProducts.length} Items",
-                  style: TextStyle(),
-                ),
-              );
-            },
-          ),
-        );
-      },
+                  ),
+
+                  // 🔹 Products grid
+                  Expanded(
+                    child: products.isEmpty
+                        ? SizedBox(
+                            height:
+                                MediaQuery.of(context).size.height -
+                                kToolbarHeight, // screen height minus AppBar
+                            child: Center(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Image.asset(
+                                    'asstes/Image-3.png',
+                                    width: 200,
+                                    height: 200,
+                                    fit: BoxFit.contain,
+                                  ),
+                                  const SizedBox(height: 16),
+                                  Text(
+                                    "No products found",
+                                    style: theme.textTheme.bodyLarge?.copyWith(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          )
+                        : ListView.builder(
+                            shrinkWrap: true,
+
+                            itemCount: provider.filteredProducts.length,
+                            itemBuilder: (context, index) {
+                              final product = products[index];
+                              return ProductListTile(
+                                from: isThisFormCustomers,
+                                productProvider: provider,
+                                product: product,
+                              );
+                            },
+                          ),
+                  ),
+                ],
+              ),
+            ),
+            floatingActionButton: Consumer<ProductProvider>(
+              builder: (context, provider, child) {
+                if (provider.selectedProducts.isEmpty) return SizedBox.shrink();
+
+                return FloatingActionButton.extended(
+                  backgroundColor: Theme.of(context).colorScheme.primary,
+                  onPressed: () async {
+                    // SharedPreferences prefs =
+                    //     await SharedPreferences.getInstance();
+                    // final userid = prefs.getString('user_id');
+
+                    // for (var product in provider.selectedProducts) {
+                    //   // For now assume quantity=1, buyer/color/shop can be asked later
+                    //   await provider.sendOrderWhatsApp(
+                    //     product,
+                    //     1, // quantity
+                    //     context,
+                    //     buyername,
+                    //     salesManId: userid ?? "",
+                    //   );
+                    // }
+
+                    // provider.clearSelections(); // reset after ordering
+
+                    List<SelectedOrder> orders = provider.selectedProducts.map((
+                      element,
+                    ) {
+                      return SelectedOrder(
+                        product: element,
+                        quantity: 0, // or your actual quantity
+                        buyer: buyername,
+                      );
+                    }).toList();
+
+                    final orderPlaced = await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => OrderScreen(
+                          products: provider.selectedProducts,
+                          order: orders,
+                          buyername: buyername,
+                        ),
+                      ),
+                    );
+
+                    // Clear selections only if order was NOT placed
+                    if (orderPlaced != true) {
+                      provider.clearSelections();
+                    }
+                  },
+                  icon: const Icon(Icons.shopping_cart_checkout),
+                  label: Text(
+                    "Order ${provider.selectedProducts.length} Items",
+                    style: TextStyle(),
+                  ),
+                );
+              },
+            ),
+          );
+        },
+      ),
     );
   }
 }
@@ -248,12 +288,18 @@ class ProductListTile extends StatelessWidget {
                           overflow: TextOverflow.ellipsis, // optional "..."
                         ),
                       ),
-                    from == true ?   Checkbox(
-                        value: productProvider.isProductSelected(product.id),
-                        onChanged: (value) {
-                          productProvider.toggleProductSelection(product.id);
-                        },
-                      ) : SizedBox(),
+                      from == true
+                          ? Checkbox(
+                              value: productProvider.isProductSelected(
+                                product.id,
+                              ),
+                              onChanged: (value) {
+                                productProvider.toggleProductSelection(
+                                  product.id,
+                                );
+                              },
+                            )
+                          : SizedBox(),
                     ],
                   ),
                   const SizedBox(height: 4),
@@ -364,7 +410,7 @@ class ProductListTile extends StatelessWidget {
                       ),
                     ],
                   ),
-               from == true ?    Divider() : SizedBox(),
+                  from == true ? Divider() : SizedBox(),
 
                   // Order Button
                   // if (from)

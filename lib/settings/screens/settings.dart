@@ -1,11 +1,13 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:iconsax/iconsax.dart';
 
 import 'package:provider/provider.dart';
+import 'package:staff_app/authentication/provider/authentication_provider.dart';
+import 'package:staff_app/authentication/screens/authentication_screen.dart';
 import 'package:staff_app/settings/screens/about_us.dart';
 import 'package:staff_app/settings/screens/privacy_policy.dart';
 import 'package:staff_app/settings/screens/terms_conditions.dart';
-
 
 class Settings extends StatelessWidget {
   const Settings({super.key});
@@ -13,8 +15,6 @@ class Settings extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final List<Map<String, dynamic>> settingsItems = [
-
-
       {
         "title": "About Us",
         "icon": Iconsax.info_circle,
@@ -45,7 +45,39 @@ class Settings extends StatelessWidget {
           );
         },
       },
+   {
+  "title": "Sign Out",
+  "icon": Iconsax.logout,
+  "onTap": () async {
+    bool? confirm = await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Confirm Logout"),
+        content: const Text("Are you sure you want to logout?"),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text("Cancel"),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text("Logout"),
+          ),
+        ],
+      ),
+    );
 
+    if (confirm == true) {
+      await context.read<UserProvider>().logout();
+      // Navigate to LoginScreen and remove all previous routes
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => LoginScreen()), 
+        (route) => false,
+      );
+    }
+  },
+}
+,
       {
         "title": "More Settings",
         "icon": Iconsax.setting_2,
@@ -119,6 +151,4 @@ class Settings extends StatelessWidget {
       ),
     );
   }
-
-
 }

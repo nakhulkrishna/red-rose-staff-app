@@ -98,8 +98,10 @@ class Product {
   String categoryId;
   double? hyperMarket;
   String market;
+   String itemCode;
 
   Product({
+    required this.itemCode,
     required this.market,
     required this.id,
     required this.name,
@@ -115,6 +117,7 @@ class Product {
 
   Map<String, dynamic> toMap() {
     return {
+      'itemCode' : itemCode, 
       'market': market,
       "hyperPrice": hyperMarket,
       'id': id,
@@ -146,6 +149,7 @@ class Product {
     }
 
     return Product(
+      itemCode: map['itemCode'] ?? "",
       market: map['market'] ?? "",
       hyperMarket: parseDouble(map['hyperPrice']),
       id: map['id'] ?? '',
@@ -392,13 +396,14 @@ Future<void> sendOrderWhatsAppMultiple(
   StringBuffer message = StringBuffer();
 
   // Header
-  message.writeln("*ORDER FORM*");
-  message.writeln("━━━━━━━━━━━━━━");
-  message.writeln("No: 001            Date: ${DateTime.now().toString().split(' ')[0]}");
-  message.writeln("Customer: $productBuyer  Phone: ");
-  message.writeln("━━━━━━━━━━━━━━");
+  message.writeln("*ORDER INVOICE*");
+  message.writeln("━━━━━━━━━━━━━━━━━━━━━━");
+  message.writeln("Date: ${DateTime.now().toString().split(' ')[0]}");
+  message.writeln("Customer: $productBuyer");
+  message.writeln("━━━━━━━━━━━━━━━━━━━━━━");
   message.writeln();
-  message.writeln("`Item            Qty   Price   Total`"); // Table header
+  message.writeln("`Item           Qty    Price     Total      CODE`"); // Table header
+  message.writeln("`-----------------------------------------------`");
 
   for (var item in selectedOrders) {
     Product product = item["product"];
@@ -413,24 +418,26 @@ Future<void> sendOrderWhatsAppMultiple(
       double w = double.tryParse(weight) ?? 0;
       total = unitPrice * w;
       grandTotal += total;
-      qtyDisplay = "$w Kg";
+      qtyDisplay = "${w.toStringAsFixed(2)}Kg";
     } else {
       total = unitPrice * qty;
       grandTotal += total;
-      qtyDisplay = "$qty Cartoon";
+      qtyDisplay = "$qty Carton";
     }
 
-    // Format each row for monospace table
+    // Format columns for alignment
     String itemName = product.name.length > 14
         ? product.name.substring(0, 14)
         : product.name.padRight(14);
     String qtyText = qtyDisplay.padLeft(5);
     String priceText = "₹${unitPrice.toStringAsFixed(0)}".padLeft(7);
     String totalText = "₹${total.toStringAsFixed(0)}".padLeft(7);
+    String codeText = (product.itemCode ?? "").padLeft(8);
 
-    message.writeln('`$itemName$qtyText$priceText$totalText`');
+    // Add row
+    message.writeln("`$itemName $qtyText $priceText $totalText $codeText`");
 
-    // ✅ Update stock in Firebase
+    // Update stock in Firestore
     final newStock = product.stock - qty;
     await FirebaseFirestore.instance
         .collection('products')
@@ -438,7 +445,7 @@ Future<void> sendOrderWhatsAppMultiple(
         .update({'stock': newStock});
     product.stock = newStock;
 
-    // ✅ Save order in Firestore
+    // Save order in Firestore
     final orderRef = FirebaseFirestore.instance.collection('orders').doc();
     final order = Order(
       buyer: productBuyer,
@@ -457,8 +464,9 @@ Future<void> sendOrderWhatsAppMultiple(
   }
 
   // Footer
-  message.writeln("------------------------------------");
+  message.writeln("━━━━━━━━━━━━━━━━━━━━━━");
   message.writeln("*Grand Total:* ₹${grandTotal.toStringAsFixed(0)}");
+
 
   final url = Uri.parse(
     "https://wa.me/$phoneNumber?text=${Uri.encodeComponent(message.toString())}",
@@ -466,7 +474,6 @@ Future<void> sendOrderWhatsAppMultiple(
 
   if (await canLaunchUrl(url)) {
     await launchUrl(url, mode: LaunchMode.externalApplication);
-    notifyListeners();
   } else {
     throw "Could not launch WhatsApp";
   }

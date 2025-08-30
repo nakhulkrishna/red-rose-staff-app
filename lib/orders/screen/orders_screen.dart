@@ -10,35 +10,61 @@ class OrdersScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text("Orders"),),
-      body:     Padding(
+      appBar: AppBar(title: Text("Orders")),
+      body: Padding(
         padding: const EdgeInsets.all(8.0),
         child: Consumer<ProductProvider>(
-                builder: (context, value, child) {
-                  return ListView.builder(
-                    shrinkWrap: true,
-                    physics: NeverScrollableScrollPhysics(),
-                    itemCount: value.orders.length,
-                    itemBuilder: (context, index) {
-                      final orders = value.orders[index];
-                      String formattedDate = orders.timestamp != null
-                          ? DateFormat('d MMM yyyy').format(orders.timestamp!)
-                          : '';
-                      return buildTransaction(
-                        context,
-                        orders.productName,
-                        formattedDate,
-                        orders.price.toString(),
-                      );
-                    },
+          builder: (context, value, child) {
+            if (value.orders.isEmpty) {
+              return SizedBox(
+                height: MediaQuery.of(context).size.height, // fill screen
+                child: Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min, // center content
+                    children: [
+                      Image.asset(
+                        'asstes/Image.png', // fix typo: 'asstes' → 'assets'
+                        width: 200,
+                        height: 200,
+                        fit: BoxFit.contain,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        "No orders yet",
+                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            } else {
+              return ListView.builder(
+                padding: const EdgeInsets.all(8),
+                itemCount: value.orders.length > 8 ? 8 : value.orders.length,
+                itemBuilder: (context, index) {
+                  final orders = value.orders[index];
+                  String formattedDate = orders.timestamp != null
+                      ? DateFormat('d MMM yyyy').format(orders.timestamp!)
+                      : '';
+                  return buildTransaction(
+                    context,
+                    orders.productName,
+                    formattedDate,
+                    orders.total.toString(),
                   );
                 },
-              ),
+              );
+            }
+          },
+        ),
       ),
-            
     );
   }
-    Widget buildTransaction(
+
+  Widget buildTransaction(
     BuildContext context,
     String name,
     String date,
@@ -92,5 +118,4 @@ class OrdersScreen extends StatelessWidget {
       ),
     );
   }
-
 }

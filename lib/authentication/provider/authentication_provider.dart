@@ -11,22 +11,16 @@ class UserModel {
   final String name;
   final String email;
 
-  UserModel({
-    required this.id,
-    required this.name,
-    required this.email,
-  });
+  UserModel({required this.id, required this.name, required this.email});
 
   factory UserModel.fromMap(Map<String, dynamic> data, String id) {
     return UserModel(
       id: id,
-      name: data['name'] ?? '',
+      name: data['username'] ?? '',
       email: data['email'] ?? '',
     );
   }
 }
-
-
 
 class UserProvider extends ChangeNotifier {
   UserModel? _currentUser;
@@ -51,40 +45,50 @@ class UserProvider extends ChangeNotifier {
     return false;
   }
 
+  // Inside UserProvider
+  Future<bool> login(String email, String password) async {
+    try {
+      // Hash the entered password
+      final bytes = utf8.encode(password);
+      final hashedPassword = sha256.convert(bytes).toString();
 
+      // Query Firestore with email & hashed password
+      QuerySnapshot snapshot = await _firestore
+          .collection('staff')
+          .where('email', isEqualTo: email)
+          .where('password', isEqualTo: hashedPassword)
+          .get();
 
-// Inside UserProvider
-Future<bool> login(String email, String password) async {
-  try {
-    // Hash the entered password
-    final bytes = utf8.encode(password);
-    final hashedPassword = sha256.convert(bytes).toString();
+      if (snapshot.docs.isNotEmpty) {
+        final doc = snapshot.docs.first;
+        _currentUser = UserModel.fromMap(
+          doc.data() as Map<String, dynamic>,
+          doc.id,
+        );
 
-    // Query Firestore with email & hashed password
-    QuerySnapshot snapshot = await _firestore
-        .collection('staff')
-        .where('email', isEqualTo: email)
-        .where('password', isEqualTo: hashedPassword)
-        .get();
+        // Save user id and name in shared preferences
+        SharedPreferences prefs = await SharedPreferences.getInstance();
+        await prefs.setString('user_id', _currentUser!.id);
+        await prefs.setString(
+          'username',
+          _currentUser!.name,
+        ); // <--- save name
 
-    if (snapshot.docs.isNotEmpty) {
-      final doc = snapshot.docs.first;
-      _currentUser = UserModel.fromMap(doc.data() as Map<String, dynamic>, doc.id);
+        notifyListeners();
+        return true;
+      }
 
-      // Save user id in shared preferences
-      SharedPreferences prefs = await SharedPreferences.getInstance();
-      await prefs.setString('user_id', _currentUser!.id);
-
-      notifyListeners();
-      return true;
+      return false;
+    } catch (e) {
+      print("Login Error: $e");
+      return false;
     }
-
-    return false;
-  } catch (e) {
-    print("Login Error: $e");
-    return false;
   }
-}
+
+  Future<String?> getUserName() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    return prefs.getString('user_name');
+  }
 
   // Logout
   Future<void> logout() async {
