@@ -35,6 +35,7 @@ class Settings extends StatelessWidget {
           );
         },
       },
+     
       {
         "title": "Terms & Conditions",
         "icon": Iconsax.document_text,
