@@ -248,21 +248,33 @@ class ProductListTile extends StatelessWidget {
           children: [
             // 🔹 Product Image
             SizedBox(
-              width: 100,
-              height: 100,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: PageView.builder(
-                  itemCount: product.images.length,
-                  itemBuilder: (context, index) {
-                    return Image.memory(
-                      base64Decode(product.images[index]),
-                      width: 100,
-                      height: 100,
-                      fit: BoxFit.cover,
+              height: 100,width: 100,
+              child: GestureDetector(
+                onTap: () {
+                  if (product.images != null &&
+                      product.images.isNotEmpty &&
+                      product.images.first.isNotEmpty) {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) =>
+                            ImagePreviewPage(images: product.images),
+                      ),
                     );
-                  },
-                ),
+                  }
+                },
+                child:
+                    (product.images == null ||
+                        product.images.isEmpty ||
+                        product.images.first.isEmpty)
+                    ? const Icon(Iconsax.image)
+                    : ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: Image.memory(
+                          base64Decode(product.images.first),
+                          fit: BoxFit.cover,
+                        ),
+                      ),
               ),
             ),
 
@@ -531,4 +543,42 @@ Widget buildTransaction(
       ],
     ),
   );
+}
+
+class ImagePreviewPage extends StatelessWidget {
+  final List<String> images;
+  final int initialIndex;
+
+  const ImagePreviewPage({
+    super.key,
+    required this.images,
+    this.initialIndex = 0,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final PageController controller = PageController(initialPage: initialIndex);
+
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        iconTheme: const IconThemeData(color: Colors.white),
+      ),
+      body: PageView.builder(
+        controller: controller,
+        itemCount: images.length,
+        itemBuilder: (context, index) {
+          return InteractiveViewer(
+            child: Center(
+              child: Image.memory(
+                base64Decode(images[index]),
+                fit: BoxFit.contain,
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
 }

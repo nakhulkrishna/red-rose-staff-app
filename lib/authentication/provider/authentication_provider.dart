@@ -87,7 +87,7 @@ class UserProvider extends ChangeNotifier {
 
   Future<String?> getUserName() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
-    return prefs.getString('user_name');
+    return prefs.getString('username');
   }
 
   // Logout

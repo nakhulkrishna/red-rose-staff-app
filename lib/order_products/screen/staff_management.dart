@@ -23,7 +23,7 @@ class AddStaffScreen extends StatelessWidget {
             child: TextField(
               onChanged: (value) => provider.setSearchQuery(value),
               decoration: InputDecoration(
-                hintText: "Search products...",
+                hintText: "Search Customers...",
                 prefixIcon: const Icon(Icons.search),
                 filled: true,
                 fillColor: theme.cardColor,

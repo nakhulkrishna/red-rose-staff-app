@@ -89,8 +89,8 @@ class Order {
 class Product {
   String id;
   String name;
-  double price; // original price
-  double? offerPrice; // ✅ new field (nullable)
+  double price; // original base price (optional, keep for legacy)
+  double? offerPrice; // ✅ optional offer price
   String unit;
   int stock;
   String description;
@@ -98,7 +98,12 @@ class Product {
   String categoryId;
   double? hyperMarket;
   String market;
-   String itemCode;
+  String itemCode;
+
+  // ✅ new fields
+  double? kgPrice;
+  double? ctrPrice;
+  double? pcsPrice;
 
   Product({
     required this.itemCode,
@@ -113,22 +118,30 @@ class Product {
     required this.images,
     required this.categoryId,
     this.hyperMarket,
+    this.kgPrice,
+    this.ctrPrice,
+    this.pcsPrice,
   });
 
   Map<String, dynamic> toMap() {
     return {
-      'itemCode' : itemCode, 
+      'itemCode': itemCode,
       'market': market,
-      "hyperPrice": hyperMarket,
+      'hyperPrice': hyperMarket,
       'id': id,
       'name': name,
       'price': price,
-      'offerPrice': offerPrice, // ✅ save offer price too
+      'offerPrice': offerPrice,
       'unit': unit,
       'stock': stock,
       'description': description,
       'images': images,
       'categoryId': categoryId,
+
+      // ✅ save new fields
+      'kgPrice': kgPrice,
+      'ctrPrice': ctrPrice,
+      'pcsPrice': pcsPrice,
     };
   }
 
@@ -161,6 +174,11 @@ class Product {
       description: map['description'] ?? '',
       images: List<String>.from(map['images'] ?? []),
       categoryId: map['categoryId'] ?? '',
+
+      // ✅ parse new fields
+      kgPrice: parseDouble(map['kgPrice']),
+      ctrPrice: parseDouble(map['ctrPrice']),
+      pcsPrice: parseDouble(map['pcsPrice']),
     );
   }
 }
@@ -169,6 +187,93 @@ class Product {
 /// PROVIDER
 /// -------------------------------
 class ProductProvider extends ChangeNotifier {
+void calculateTotal(String productId, Product product) {
+  final unit = _unitType[productId] ?? 'Kg';
+  double total = 0;
+
+  switch (unit) {
+    case 'Kg':
+      final kg = double.tryParse(_kgControllers[productId]?.text ?? "0") ?? 0;
+      final kgPrice = product.kgPrice ?? product.offerPrice ?? product.price;
+      total = kg * kgPrice;
+      break;
+
+    case 'Piece':
+      final pcs =
+          double.tryParse(_pieceControllers[productId]?.text ?? "0") ?? 0;
+      final pcsPrice = product.pcsPrice ?? product.offerPrice ?? product.price;
+      total = pcs * pcsPrice;
+      break;
+
+    case 'Cartoon':
+      final ctr =
+          double.tryParse(_ctrControllers[productId]?.text ?? "0") ?? 0;
+      final ctrPrice = product.ctrPrice ?? product.offerPrice ?? product.price;
+      total = ctr * ctrPrice;
+      break;
+  }
+
+  _totals[productId] = total;
+  notifyListeners();
+}
+
+  Map<String, TextEditingController> _kgControllers = {};
+  Map<String, TextEditingController> _kgPriceControllers = {};
+  Map<String, TextEditingController> _ctrControllers = {};
+  Map<String, TextEditingController> _ctrPriceControllers = {};
+  Map<String, TextEditingController> _pieceControllers = {};
+  Map<String, TextEditingController> _piecePriceControllers = {};
+
+  Map<String, double> _totals = {};
+
+  TextEditingController kgController(String pid) =>
+      _kgControllers.putIfAbsent(pid, () => TextEditingController());
+  TextEditingController kgPriceController(String pid) =>
+      _kgPriceControllers.putIfAbsent(pid, () => TextEditingController());
+  TextEditingController ctrController(String pid) =>
+      _ctrControllers.putIfAbsent(pid, () => TextEditingController());
+  TextEditingController ctrPriceController(String pid) =>
+      _ctrPriceControllers.putIfAbsent(pid, () => TextEditingController());
+  TextEditingController pieceController(String pid) =>
+      _pieceControllers.putIfAbsent(pid, () => TextEditingController());
+  TextEditingController piecePriceController(String pid) =>
+      _piecePriceControllers.putIfAbsent(pid, () => TextEditingController());
+
+  // void calculateTotal(String pid) {
+  //   final kg = double.tryParse(_kgControllers[pid]?.text ?? "0") ?? 0;
+  //   final kgPrice = double.tryParse(_kgPriceControllers[pid]?.text ?? "0") ?? 0;
+  //   final ctr = double.tryParse(_ctrControllers[pid]?.text ?? "0") ?? 0;
+  //   final ctrPrice = double.tryParse(_ctrPriceControllers[pid]?.text ?? "0") ?? 0;
+  //   final piece = double.tryParse(_pieceControllers[pid]?.text ?? "0") ?? 0;
+  //   final piecePrice = double.tryParse(_piecePriceControllers[pid]?.text ?? "0") ?? 0;
+
+  //   _totals[pid] = (kg * kgPrice) + (ctr * ctrPrice) + (piece * piecePrice);
+  //   notifyListeners();
+  // }
+
+  double productTotal(String pid) => _totals[pid] ?? 0;
+
+  double get grandTotal => _totals.values.fold(0, (sum, item) => sum + item);
+
+  List<Map<String, dynamic>> buildFinalOrders(List<Product> products) {
+    return products
+        .map((p) {
+          return {
+            "productId": p.id,
+            "name": p.name,
+            "total": productTotal(p.id),
+            "kg": _kgControllers[p.id]?.text,
+            "kgPrice": _kgPriceControllers[p.id]?.text,
+            "ctr": _ctrControllers[p.id]?.text,
+            "ctrPrice": _ctrPriceControllers[p.id]?.text,
+            "pieces": _pieceControllers[p.id]?.text,
+            "piecePrice": _piecePriceControllers[p.id]?.text,
+          };
+        })
+        .where((o) => (o["total"] ?? 0) == 0)
+        .toList();
+  }
+
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   ProductProvider() {
@@ -378,9 +483,9 @@ class ProductProvider extends ChangeNotifier {
   /// SEND ORDER TO WHATSAPP + SAVE IN FIRESTORE
   /// -------------------------------
 Future<void> sendOrderWhatsAppMultiple(
-  List<Map<String, dynamic>> selectedOrders,
+ List<Map<String, dynamic>> orders,
   BuildContext context,
-  String productBuyer, {
+  String buyerName, {
   required String salesManId,
 }) async {
   final phoneNumber = whatsappNumber;
@@ -392,53 +497,66 @@ Future<void> sendOrderWhatsAppMultiple(
     return;
   }
 
+  SharedPreferences prefs = await SharedPreferences.getInstance();
+  final salesMan = prefs.getString('username') ?? '';
+
   double grandTotal = 0;
   StringBuffer message = StringBuffer();
 
   // Header
-  message.writeln("*ORDER INVOICE*");
+  message.writeln("*$salesMan*");
   message.writeln("━━━━━━━━━━━━━━━━━━━━━━");
   message.writeln("Date: ${DateTime.now().toString().split(' ')[0]}");
-  message.writeln("Customer: $productBuyer");
+  message.writeln("Customer: $buyerName");
   message.writeln("━━━━━━━━━━━━━━━━━━━━━━");
   message.writeln();
-  message.writeln("`Item           Qty    Price     Total      CODE`"); // Table header
-  message.writeln("`-----------------------------------------------`");
+  message.writeln("`Item           Qty    UnitPrice   Total      CODE`");
+  message.writeln("`---------------------------------------------------`");
 
-  for (var item in selectedOrders) {
-    Product product = item["product"];
-    int qty = item["qty"];
-    String? weight = item["weight"];
+  for (var product in selectedProducts) {
+    final pid = product.id;
+    final unit = unitType(pid);
 
-    double unitPrice = product.offerPrice ?? product.price;
-    double total;
-    String qtyDisplay;
+    double quantity = 0;
+    double unitPrice = 0;
 
-    if (weight != null && weight.isNotEmpty) {
-      double w = double.tryParse(weight) ?? 0;
-      total = unitPrice * w;
-      grandTotal += total;
-      qtyDisplay = "${w.toStringAsFixed(2)}Kg";
-    } else {
-      total = unitPrice * qty;
-      grandTotal += total;
-      qtyDisplay = "$qty Carton";
+    // Determine quantity and unit price based on selected unit
+    switch (unit) {
+      case 'Kg':
+        quantity = double.tryParse(_kgControllers[pid]?.text ?? "0") ?? 0;
+        unitPrice = product.kgPrice ?? product.offerPrice ?? product.price;
+        break;
+      case 'Piece':
+        quantity = double.tryParse(_pieceControllers[pid]?.text ?? "0") ?? 0;
+        unitPrice = product.pcsPrice ?? product.offerPrice ?? product.price;
+        break;
+      case 'Cartoon':
+        quantity = double.tryParse(_ctrControllers[pid]?.text ?? "0") ?? 0;
+        unitPrice = product.ctrPrice ?? product.offerPrice ?? product.price;
+        break;
     }
 
-    // Format columns for alignment
-    String itemName = product.name.length > 14
-        ? product.name.substring(0, 14)
-        : product.name.padRight(14);
-    String qtyText = qtyDisplay.padLeft(5);
-    String priceText = "₹${unitPrice.toStringAsFixed(0)}".padLeft(7);
-    String totalText = "₹${total.toStringAsFixed(0)}".padLeft(7);
-    String codeText = (product.itemCode ?? "").padLeft(8);
+    double total = quantity * unitPrice;
+    grandTotal += total;
 
-    // Add row
+    String qtyDisplay = unit == 'Kg'
+        ? "${quantity.toStringAsFixed(2)} Kg"
+        : unit == 'Piece'
+            ? "${quantity.toInt()} pcs"
+            : "${quantity.toInt()} ctr";
+
+    // Format columns
+    String itemName =
+        product.name.length > 14 ? product.name.substring(0, 14) : product.name.padRight(14);
+    String qtyText = qtyDisplay.padLeft(8);
+    String priceText = "QR ${unitPrice.toStringAsFixed(2)}".padLeft(10);
+    String totalText = "QR ${total.toStringAsFixed(2)}".padLeft(10);
+    String codeText = (product.itemCode).padLeft(8);
+
     message.writeln("`$itemName $qtyText $priceText $totalText $codeText`");
 
     // Update stock in Firestore
-    final newStock = product.stock - qty;
+    final newStock = product.stock - quantity.toInt();
     await FirebaseFirestore.instance
         .collection('products')
         .doc(product.id)
@@ -447,30 +565,26 @@ Future<void> sendOrderWhatsAppMultiple(
 
     // Save order in Firestore
     final orderRef = FirebaseFirestore.instance.collection('orders').doc();
-    final order = Order(
-      buyer: productBuyer,
-      orderId: orderRef.id,
-      salesManId: salesManId,
-      productId: product.id,
-      productName: product.name,
-      price: unitPrice,
-      quantity: weight != null && weight.isNotEmpty
-          ? (double.tryParse(weight) ?? 0).toInt()
-          : qty,
-      total: total,
-      timestamp: DateTime.now(),
-    );
-    await orderRef.set(order.toMap());
+    await orderRef.set({
+      "buyer": buyerName,
+      "orderId": orderRef.id,
+      "salesManId": salesManId,
+      "productId": product.id,
+      "productName": product.name,
+      "unit": unit,
+      "quantity": quantity,
+      "unitPrice": unitPrice,
+      "total": total,
+      "timestamp": DateTime.now(),
+    });
   }
 
   // Footer
   message.writeln("━━━━━━━━━━━━━━━━━━━━━━");
-  message.writeln("*Grand Total:* ₹${grandTotal.toStringAsFixed(0)}");
-
+  message.writeln("*Grand Total:* QR${grandTotal.toStringAsFixed(2)}");
 
   final url = Uri.parse(
-    "https://wa.me/$phoneNumber?text=${Uri.encodeComponent(message.toString())}",
-  );
+      "https://wa.me/$phoneNumber?text=${Uri.encodeComponent(message.toString())}");
 
   if (await canLaunchUrl(url)) {
     await launchUrl(url, mode: LaunchMode.externalApplication);
