@@ -76,42 +76,49 @@ class PrivacyPolicyScreen extends StatelessWidget {
               section(
                 "Information We Collect",
                 Iconsax.document,
-                "- Name, Email, WhatsApp Number.\n"
-                    "- Orders, Products, Customer details.\n"
-                    "- No payment details are collected.",
+                "- Name, Email, and Contact Number.\n"
+                "- Orders, products, and app usage data.\n"
+                "- No payment details are collected.",
               ),
 
               section(
                 "How We Use Information",
                 Iconsax.activity,
-                "- Manage sales and product records.\n"
-                    "- Communicate order-related details.\n"
-                    "- Provide support & improve services.",
+                "- To provide and improve app features.\n"
+                "- To communicate updates and provide support.\n"
+                "- To ensure a smooth and secure user experience.",
+              ),
+
+              section(
+                "Account Deletion",
+                Iconsax.trash,
+                "- Users can delete their account at any time from within the app.\n"
+                "- Deleting the account permanently removes all personal data and app history.",
               ),
 
               section(
                 "Data Sharing",
                 Iconsax.share,
-                "- We do not sell or rent data.\n"
-                    "- Data may be shared with trusted third-party services only if required.",
+                "- We do not sell or rent personal data.\n"
+                "- Data may be shared with trusted third-party services only if required to provide app functionality.",
               ),
 
               section(
                 "Data Security",
                 Iconsax.shield_tick,
-                "We apply reasonable security measures to keep your data safe.",
+                "We use reasonable security measures to protect your data from unauthorized access.",
               ),
 
               section(
                 "Contact Us",
                 Iconsax.message,
-                "Email: jabirkarulai@gmail.com\nWhatsApp: ++974 7727 0580 \nIndian: 9946270580",
+                "Email: jabirkarulai@gmail.com\nWhatsApp: ++974 7727 0580 / Indian: 9946270580",
               ),
 
               const SizedBox(height: 30),
               Center(
                 child: Text(
-                  "© 2025 Red Rose Contracting W.L.L",
+                  "© 2025 Red Rose",
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: Colors.grey,
                   ),

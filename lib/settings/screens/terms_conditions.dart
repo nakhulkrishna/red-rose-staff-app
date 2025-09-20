@@ -19,19 +19,19 @@ class TermsAndConditionsScreen extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
-                // mainAxisAlignment: MainAxisAlignment.start,
-                // crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                     CircleAvatar(
-              radius: 24,
-              backgroundColor: theme.primaryColor,
-              child: Icon(icon, color: Colors.white),
-            ),
+                  CircleAvatar(
+                    radius: 24,
+                    backgroundColor: theme.primaryColor,
+                    child: Icon(icon, color: Colors.white),
+                  ),
                   const SizedBox(width: 8),
-                  Text(title,
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      )),
+                  Text(
+                    title,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ],
               ),
               const SizedBox(height: 8),
@@ -52,29 +52,38 @@ class TermsAndConditionsScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text("Last Updated: 27 Aug 2025",
-                style: theme.textTheme.bodySmall
-                    ?.copyWith(color: Colors.grey[600])),
+            Text(
+              "Last Updated: 27 Aug 2025",
+              style: theme.textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
+            ),
             const SizedBox(height: 16),
 
             buildSection(
               "Use of App",
-              "The app is intended for managing sales, products, and customer records. "
+              "The app is designed to help users manage products, orders, and records. "
               "Do not use the app for illegal purposes.",
               Iconsax.document,
             ),
 
             buildSection(
+              "Account & Data",
+              "Users are responsible for maintaining account credentials. "
+              "You can delete your account at any time from within the app. "
+              "Deleting your account permanently removes all personal data.",
+              Iconsax.trash,
+            ),
+
+            buildSection(
               "Orders & Delivery",
               "This app is for record-keeping only. "
-              "No shipping or delivery is managed within the app.",
+              "No shipping or delivery is handled within the app.",
               Iconsax.box,
             ),
 
             buildSection(
               "Payments",
-              "No payments or transactions are processed through the app. "
-              "All payments are managed outside the app.",
+              "No payments or transactions are processed within the app. "
+              "All payments are handled externally.",
               Iconsax.money,
             ),
 
@@ -94,9 +103,8 @@ class TermsAndConditionsScreen extends StatelessWidget {
             const SizedBox(height: 20),
             Center(
               child: Text(
-                "© 2025 Red Rose Contract W.L.L",
-                style: theme.textTheme.bodySmall
-                    ?.copyWith(color: Colors.grey[600]),
+                "© 2025 Red Rose",
+                style: theme.textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
               ),
             ),
           ],

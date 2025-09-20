@@ -49,11 +49,56 @@ class OrdersScreen extends StatelessWidget {
                   String formattedDate = orders.timestamp != null
                       ? DateFormat('d MMM yyyy').format(orders.timestamp!)
                       : '';
-                  return buildTransaction(
-                    context,
-                    orders.productName,
-                    formattedDate,
-                    orders.total.toString(),
+
+                  return Dismissible(
+                    key: Key(
+                      orders.orderId,
+                    ), // make sure your Order model has an "id"
+                    direction:
+                        DismissDirection.endToStart, // swipe left to delete
+                    background: Container(
+                      padding: const EdgeInsets.only(right: 20),
+                      alignment: Alignment.centerRight,
+                      color: Colors.red,
+                      child: const Icon(Icons.delete, color: Colors.white),
+                    ),
+                    confirmDismiss: (direction) async {
+                      return await showDialog(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          title: const Text("Delete Order"),
+                          content: const Text(
+                            "Are you sure you want to delete this order?",
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.of(ctx).pop(false),
+                              child: const Text("Cancel"),
+                            ),
+                            TextButton(
+                              onPressed: () => Navigator.of(ctx).pop(true),
+                              child: const Text("Delete"),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                    onDismissed: (direction) {
+                      Provider.of<ProductProvider>(
+                        context,
+                        listen: false,
+                      ).deleteOrder(orders.orderId);
+
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text("✅ Order deleted")),
+                      );
+                    },
+                    child: buildTransaction(
+                      context,
+                      orders.productName,
+                      formattedDate,
+                      orders.total.toString(),
+                    ),
                   );
                 },
               );

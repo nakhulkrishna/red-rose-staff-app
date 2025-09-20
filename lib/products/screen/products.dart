@@ -3,7 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:iconsax/iconsax.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-import 'package:staff_app/authentication/provider/authentication_provider.dart';
+import 'package:staff_app/authentication%20copy/provider/authentication_provider.dart';
+
 import 'package:staff_app/order_products/provider/customer.dart';
 import 'package:staff_app/orders/screen/orders_screen.dart';
 import 'package:staff_app/products/provider/products_management.dart';

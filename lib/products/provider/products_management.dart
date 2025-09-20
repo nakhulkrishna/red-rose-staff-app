@@ -592,6 +592,17 @@ Future<void> sendOrderWhatsAppMultiple(
     throw "Could not launch WhatsApp";
   }
 }
+Future<void> deleteOrder(String orderId) async {
+  try {
+    await _firestore.collection('orders').doc(orderId).delete();
+
+    // Remove locally
+    _orders.removeWhere((order) => order.orderId == orderId);
+    notifyListeners();
+  } catch (e) {
+    debugPrint("❌ Error deleting order: $e");
+  }
+}
 
   /// -------------------------------
   /// CLEAN UP LISTENERS

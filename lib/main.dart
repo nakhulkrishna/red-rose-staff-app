@@ -1,9 +1,9 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:staff_app/authentication/provider/authentication_provider.dart';
-import 'package:staff_app/authentication/screens/authentication_screen.dart';
-import 'package:staff_app/authentication/screens/splash_screen.dart';
+import 'package:staff_app/authentication%20copy/provider/authentication_provider.dart';
+import 'package:staff_app/authentication%20copy/screens/splash_screen.dart';
+
 import 'package:staff_app/firebase_options.dart';
 import 'package:staff_app/order_products/provider/customer.dart';
 import 'package:staff_app/products/provider/products_management.dart';

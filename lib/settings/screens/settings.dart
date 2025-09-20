@@ -3,8 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:iconsax/iconsax.dart';
 
 import 'package:provider/provider.dart';
-import 'package:staff_app/authentication/provider/authentication_provider.dart';
-import 'package:staff_app/authentication/screens/authentication_screen.dart';
+import 'package:staff_app/authentication%20copy/provider/authentication_provider.dart';
+import 'package:staff_app/authentication%20copy/screens/authentication_screen.dart';
+import 'package:staff_app/authentication%20copy/screens/splash_screen.dart';
+
 import 'package:staff_app/settings/screens/about_us.dart';
 import 'package:staff_app/settings/screens/privacy_policy.dart';
 import 'package:staff_app/settings/screens/terms_conditions.dart';
@@ -46,6 +48,40 @@ class Settings extends StatelessWidget {
           );
         },
       },
+       {
+    
+  "title": "Delete Account",
+  "icon": Iconsax.trash,
+  "onTap": () async {
+    bool? confirm = await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Confirm Logout"),
+        content: const Text("Are you sure you want to Delete ?"),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text("Cancel"),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text("Delete"),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      await context.read<UserProvider>().logout();
+      // Navigate to LoginScreen and remove all previous routes
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => SplashScreen()), 
+        (route) => false,
+      );
+    }
+  },
+}
+,
    {
   "title": "Sign Out",
   "icon": Iconsax.logout,
@@ -72,7 +108,7 @@ class Settings extends StatelessWidget {
       await context.read<UserProvider>().logout();
       // Navigate to LoginScreen and remove all previous routes
       Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => LoginScreen()), 
+        MaterialPageRoute(builder: (_) => SplashScreen()), 
         (route) => false,
       );
     }
