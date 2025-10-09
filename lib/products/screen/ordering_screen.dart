@@ -42,10 +42,9 @@ class OrderScreen extends StatelessWidget {
                     children: [
                       ListTile(
                         leading: product.images.isNotEmpty
-                            ? Image.memory(
-                                base64Decode(product.images.first),
-                                width: 50,
-                                height: 50,
+                            ? Image.network(
+                                product.images.first,
+
                                 fit: BoxFit.cover,
                               )
                             : const Icon(Icons.image, size: 50),
@@ -90,7 +89,8 @@ class OrderScreen extends StatelessWidget {
                                 onChanged: (value) {
                                   provider.setUnitType(productId, value!);
                                   provider.calculateTotal(
-                                    productId,product
+                                    productId,
+                                    product,
                                   ); // ✅ Recalculate
                                 },
                               ),
@@ -113,7 +113,6 @@ class OrderScreen extends StatelessWidget {
                           onChanged: (val) =>
                               provider.calculateTotal(productId, product),
                         ),
-                        
                       ] else if (provider.unitType(productId) == 'Piece') ...[
                         TextField(
                           decoration: const InputDecoration(
@@ -123,9 +122,8 @@ class OrderScreen extends StatelessWidget {
                           keyboardType: TextInputType.number,
                           controller: provider.pieceController(productId),
                           onChanged: (val) =>
-                               provider.calculateTotal(productId, product),
+                              provider.calculateTotal(productId, product),
                         ),
-                        
                       ] else if (provider.unitType(productId) == 'Cartoon') ...[
                         TextField(
                           decoration: const InputDecoration(
@@ -135,9 +133,8 @@ class OrderScreen extends StatelessWidget {
                           keyboardType: TextInputType.number,
                           controller: provider.ctrController(productId),
                           onChanged: (val) =>
-                                provider.calculateTotal(productId, product),
+                              provider.calculateTotal(productId, product),
                         ),
-                        
                       ],
                       // After Dropdown and quantity/weight input
                       Text(
@@ -167,74 +164,91 @@ class OrderScreen extends StatelessWidget {
                     style: ElevatedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 14),
                     ),
-                 onPressed: () async {
-  final confirm = await showDialog<bool>(
-    context: context,
-    builder: (ctx) => AlertDialog(
-      title: const Text("Confirm Order"),
-      content: const Text("Are you sure you want to place all orders?"),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(ctx).pop(false),
-          child: const Text("Cancel"),
-        ),
-        ElevatedButton(
-          onPressed: () => Navigator.of(ctx).pop(true),
-          child: const Text("Confirm"),
-        ),
-      ],
-    ),
-  );
+                    onPressed: () async {
+                      final confirm = await showDialog<bool>(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          title: const Text("Confirm Order"),
+                          content: const Text(
+                            "Are you sure you want to place all orders?",
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.of(ctx).pop(false),
+                              child: const Text("Cancel"),
+                            ),
+                            ElevatedButton(
+                              onPressed: () => Navigator.of(ctx).pop(true),
+                              child: const Text("Confirm"),
+                            ),
+                          ],
+                        ),
+                      );
 
-  if (confirm == true) {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    final userid = prefs.getString('user_id') ?? "";
+                      if (confirm == true) {
+                        SharedPreferences prefs =
+                            await SharedPreferences.getInstance();
+                        final userid = prefs.getString('user_id') ?? "";
 
-    List<Map<String, dynamic>> selectedOrders = [];
+                        List<Map<String, dynamic>> selectedOrders = [];
 
-    // ✅ Populate orders
-    for (var product in products) {
-      final pid = product.id;
-      final unit = provider.unitType(pid);
-      double qty = 0;
-      double? weight;
+                        // ✅ Populate orders
+                        for (var product in products) {
+                          final pid = product.id;
+                          final unit = provider.unitType(pid);
+                          double qty = 0;
+                          double? weight;
 
-      if (unit == 'Kg') {
-        weight = double.tryParse(provider.kgController(pid)?.text ?? "0") ?? 0;
-        qty = weight; // if you need quantity as weight
-      } else if (unit == 'Piece') {
-        qty = double.tryParse(provider.pieceController(pid)?.text ?? "0") ?? 0;
-      } else if (unit == 'Cartoon') {
-        qty = double.tryParse(provider.ctrController(pid)?.text ?? "0") ?? 0;
-      }
+                          if (unit == 'Kg') {
+                            weight =
+                                double.tryParse(
+                                  provider.kgController(pid)?.text ?? "0",
+                                ) ??
+                                0;
+                            qty = weight; // if you need quantity as weight
+                          } else if (unit == 'Piece') {
+                            qty =
+                                double.tryParse(
+                                  provider.pieceController(pid)?.text ?? "0",
+                                ) ??
+                                0;
+                          } else if (unit == 'Cartoon') {
+                            qty =
+                                double.tryParse(
+                                  provider.ctrController(pid)?.text ?? "0",
+                                ) ??
+                                0;
+                          }
 
-      if (qty > 0) {
-        selectedOrders.add({
-          "product": product,
-          "qty": qty,
-          "weight": weight,
-        });
-      }
-    }
+                          if (qty > 0) {
+                            selectedOrders.add({
+                              "product": product,
+                              "qty": qty,
+                              "weight": weight,
+                            });
+                          }
+                        }
 
-    // ✅ Send order only if there are products
-    if (selectedOrders.isNotEmpty) {
-      await provider.sendOrderWhatsAppMultiple(
-        selectedOrders,
-        context,
-        buyername,
-        salesManId: userid,
-      );
+                        // ✅ Send order only if there are products
+                        if (selectedOrders.isNotEmpty) {
+                          await provider.sendOrderWhatsAppMultiple(
+                            selectedOrders,
+                            context,
+                            buyername,
+                            salesManId: userid,
+                          );
 
-      provider.clearSelections();
-      Navigator.pop(context); // Go back to products screen
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("No products selected")),
-      );
-    }
-  }
-},
+                          provider.clearSelections();
+                          Navigator.pop(context); // Go back to products screen
+                        } else {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text("No products selected"),
+                            ),
+                          );
+                        }
+                      }
+                    },
 
                     // onPressed: () async {
                     //   SharedPreferences prefs =

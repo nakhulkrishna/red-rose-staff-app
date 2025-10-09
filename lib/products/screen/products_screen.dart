@@ -248,7 +248,8 @@ class ProductListTile extends StatelessWidget {
           children: [
             // 🔹 Product Image
             SizedBox(
-              height: 100,width: 100,
+              height: 100,
+              width: 100,
               child: GestureDetector(
                 onTap: () {
                   if (product.images != null &&
@@ -270,8 +271,8 @@ class ProductListTile extends StatelessWidget {
                     ? const Icon(Iconsax.image)
                     : ClipRRect(
                         borderRadius: BorderRadius.circular(12),
-                        child: Image.memory(
-                          base64Decode(product.images.first),
+                        child: Image.network(
+                          product.images.first,
                           fit: BoxFit.cover,
                         ),
                       ),
@@ -474,17 +475,12 @@ class ProductListTile extends StatelessWidget {
   }
 }
 
-Widget buildProductImage(String base64Image, {double size = 40}) {
+Widget buildProductImage(String images, {double size = 40}) {
   try {
-    if (base64Image.isEmpty) {
+    if (images.isEmpty) {
       return Icon(Iconsax.camera, size: size, color: Colors.grey);
     }
-    return Image.memory(
-      base64Decode(base64Image),
-      width: size,
-      height: size,
-      fit: BoxFit.cover,
-    );
+    return Image.network(images, fit: BoxFit.cover);
   } catch (e) {
     return Icon(Icons.broken_image, size: size, color: Colors.red);
   }
@@ -570,11 +566,13 @@ class ImagePreviewPage extends StatelessWidget {
         itemCount: images.length,
         itemBuilder: (context, index) {
           return InteractiveViewer(
+            clipBehavior: Clip.none, // allow panning outside bounds
+            panEnabled: true, // allow moving image
+            scaleEnabled: true, // allow pinch zoom
+            minScale: 1.0, // default scale
+            maxScale: 4.0, // up to 4x zoom
             child: Center(
-              child: Image.memory(
-                base64Decode(images[index]),
-                fit: BoxFit.contain,
-              ),
+              child: Image.network(images[index], fit: BoxFit.contain),
             ),
           );
         },

@@ -89,21 +89,21 @@ class Order {
 class Product {
   String id;
   String name;
-  double price; // original base price (optional, keep for legacy)
+  double price; // original price
   double? offerPrice; // ✅ optional offer price
   String unit;
   int stock;
   String description;
   List<String> images;
   String categoryId;
-  double? hyperMarket;
+  double? hyperMarket; // ✅ maybe used as hyper price reference
   String market;
   String itemCode;
-
-  // ✅ new fields
+  double? hyperMarketPrice; // ✅ actual Hyper Market offer price
   double? kgPrice;
   double? ctrPrice;
   double? pcsPrice;
+  bool isHidden;
 
   Product({
     required this.itemCode,
@@ -118,16 +118,18 @@ class Product {
     required this.images,
     required this.categoryId,
     this.hyperMarket,
+    this.hyperMarketPrice,
     this.kgPrice,
     this.ctrPrice,
     this.pcsPrice,
+    this.isHidden = false,
   });
 
   Map<String, dynamic> toMap() {
     return {
       'itemCode': itemCode,
       'market': market,
-      'hyperPrice': hyperMarket,
+      'hyperPrice': hyperMarket, // keep key consistent
       'id': id,
       'name': name,
       'price': price,
@@ -137,11 +139,11 @@ class Product {
       'description': description,
       'images': images,
       'categoryId': categoryId,
-
-      // ✅ save new fields
+      'hyperMarketPrice': hyperMarketPrice,
       'kgPrice': kgPrice,
       'ctrPrice': ctrPrice,
       'pcsPrice': pcsPrice,
+      'isHidden': isHidden,
     };
   }
 
@@ -165,6 +167,7 @@ class Product {
       itemCode: map['itemCode'] ?? "",
       market: map['market'] ?? "",
       hyperMarket: parseDouble(map['hyperPrice']),
+      hyperMarketPrice: parseDouble(map['hyperMarketPrice']),
       id: map['id'] ?? '',
       name: map['name'] ?? '',
       price: parseDouble(map['price']) ?? 0.0,
@@ -174,11 +177,51 @@ class Product {
       description: map['description'] ?? '',
       images: List<String>.from(map['images'] ?? []),
       categoryId: map['categoryId'] ?? '',
-
-      // ✅ parse new fields
       kgPrice: parseDouble(map['kgPrice']),
       ctrPrice: parseDouble(map['ctrPrice']),
       pcsPrice: parseDouble(map['pcsPrice']),
+      isHidden: (map['isHidden'] != null && map['isHidden'] is bool)
+          ? map['isHidden'] as bool
+          : false,
+    );
+  }
+  Product copyWith({
+    String? id,
+    String? name,
+    String? itemCode,
+    double? price,
+    double? offerPrice,
+    String? unit,
+    int? stock,
+    String? description,
+    List<String>? images,
+    String? categoryId,
+    double? hyperMarket,
+    double? hyperMarketPrice,
+    String? market,
+    double? kgPrice,
+    double? ctrPrice,
+    double? pcsPrice,
+    bool? isHidden, // ✅ new field
+  }) {
+    return Product(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      itemCode: itemCode ?? this.itemCode,
+      price: price ?? this.price,
+      offerPrice: offerPrice ?? this.offerPrice,
+      unit: unit ?? this.unit,
+      stock: stock ?? this.stock,
+      description: description ?? this.description,
+      images: images ?? List<String>.from(this.images),
+      categoryId: categoryId ?? this.categoryId,
+      hyperMarket: hyperMarket ?? this.hyperMarket,
+      hyperMarketPrice: hyperMarketPrice ?? this.hyperMarketPrice,
+      market: market ?? this.market,
+      kgPrice: kgPrice ?? this.kgPrice,
+      ctrPrice: ctrPrice ?? this.ctrPrice,
+      pcsPrice: pcsPrice ?? this.pcsPrice,
+      isHidden: isHidden ?? this.isHidden, // ✅ updated copy
     );
   }
 }
@@ -399,7 +442,7 @@ void calculateTotal(String productId, Product product) {
   /// -------------------------------
   void listenProducts() {
     _productSub?.cancel(); // prevent duplicate listeners
-    _productSub = _firestore.collection('products').snapshots().listen((
+    _productSub = _firestore.collection('products').where("isHidden" , isEqualTo:  false).snapshots().listen((
       snapshot,
     ) {
       _products
