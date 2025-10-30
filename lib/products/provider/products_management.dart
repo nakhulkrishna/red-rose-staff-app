@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:developer';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -230,35 +231,37 @@ class Product {
 /// PROVIDER
 /// -------------------------------
 class ProductProvider extends ChangeNotifier {
-void calculateTotal(String productId, Product product) {
-  final unit = _unitType[productId] ?? 'Kg';
-  double total = 0;
+  void calculateTotal(String productId, Product product) {
+    final unit = _unitType[productId] ?? 'Kg';
+    double total = 0;
 
-  switch (unit) {
-    case 'Kg':
-      final kg = double.tryParse(_kgControllers[productId]?.text ?? "0") ?? 0;
-      final kgPrice = product.kgPrice ?? product.offerPrice ?? product.price;
-      total = kg * kgPrice;
-      break;
+    switch (unit) {
+      case 'Kg':
+        final kg = double.tryParse(_kgControllers[productId]?.text ?? "0") ?? 0;
+        final kgPrice = product.kgPrice ?? product.offerPrice ?? product.price;
+        total = kg * kgPrice;
+        break;
 
-    case 'Piece':
-      final pcs =
-          double.tryParse(_pieceControllers[productId]?.text ?? "0") ?? 0;
-      final pcsPrice = product.pcsPrice ?? product.offerPrice ?? product.price;
-      total = pcs * pcsPrice;
-      break;
+      case 'Piece':
+        final pcs =
+            double.tryParse(_pieceControllers[productId]?.text ?? "0") ?? 0;
+        final pcsPrice =
+            product.pcsPrice ?? product.offerPrice ?? product.price;
+        total = pcs * pcsPrice;
+        break;
 
-    case 'Cartoon':
-      final ctr =
-          double.tryParse(_ctrControllers[productId]?.text ?? "0") ?? 0;
-      final ctrPrice = product.ctrPrice ?? product.offerPrice ?? product.price;
-      total = ctr * ctrPrice;
-      break;
+      case 'Cartoon':
+        final ctr =
+            double.tryParse(_ctrControllers[productId]?.text ?? "0") ?? 0;
+        final ctrPrice =
+            product.ctrPrice ?? product.offerPrice ?? product.price;
+        total = ctr * ctrPrice;
+        break;
+    }
+
+    _totals[productId] = total;
+    notifyListeners();
   }
-
-  _totals[productId] = total;
-  notifyListeners();
-}
 
   Map<String, TextEditingController> _kgControllers = {};
   Map<String, TextEditingController> _kgPriceControllers = {};
@@ -424,6 +427,7 @@ void calculateTotal(String productId, Product product) {
   }
 
   void setCategory(String? categoryId) {
+    log("selected category $categoryId");
     selectedCategory = categoryId;
     notifyListeners();
   }
@@ -442,14 +446,16 @@ void calculateTotal(String productId, Product product) {
   /// -------------------------------
   void listenProducts() {
     _productSub?.cancel(); // prevent duplicate listeners
-    _productSub = _firestore.collection('products').where("isHidden" , isEqualTo:  false).snapshots().listen((
-      snapshot,
-    ) {
-      _products
-        ..clear()
-        ..addAll(snapshot.docs.map((doc) => Product.fromMap(doc.data())));
-      notifyListeners();
-    });
+    _productSub = _firestore
+        .collection('products')
+        .where("isHidden", isEqualTo: false)
+        .snapshots()
+        .listen((snapshot) {
+          _products
+            ..clear()
+            ..addAll(snapshot.docs.map((doc) => Product.fromMap(doc.data())));
+          notifyListeners();
+        });
   }
 
   void listenOrders() async {
@@ -514,7 +520,7 @@ void calculateTotal(String productId, Product product) {
 
       final matchesCategory =
           selectedCategory == null || p.categoryId == selectedCategory;
-
+      log("selected category : $selectedCategory and ${p.categoryId}");
       return matchesSearch && matchesCategory;
     }).toList();
   }
@@ -525,127 +531,169 @@ void calculateTotal(String productId, Product product) {
   /// -------------------------------
   /// SEND ORDER TO WHATSAPP + SAVE IN FIRESTORE
   /// -------------------------------
-Future<void> sendOrderWhatsAppMultiple(
- List<Map<String, dynamic>> orders,
-  BuildContext context,
-  String buyerName, {
-  required String salesManId,
-}) async {
-  final phoneNumber = whatsappNumber;
-
-  if (phoneNumber == null || phoneNumber.isEmpty) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("❌ WhatsApp number not available")),
-    );
-    return;
-  }
-
-  SharedPreferences prefs = await SharedPreferences.getInstance();
-  final salesMan = prefs.getString('username') ?? '';
-
-  double grandTotal = 0;
-  StringBuffer message = StringBuffer();
-
-  // Header
-  message.writeln("*$salesMan*");
-  message.writeln("━━━━━━━━━━━━━━━━━━━━━━");
-  message.writeln("Date: ${DateTime.now().toString().split(' ')[0]}");
-  message.writeln("Customer: $buyerName");
-  message.writeln("━━━━━━━━━━━━━━━━━━━━━━");
-  message.writeln();
-  message.writeln("`Item           Qty    UnitPrice   Total      CODE`");
-  message.writeln("`---------------------------------------------------`");
-
-  for (var product in selectedProducts) {
-    final pid = product.id;
-    final unit = unitType(pid);
-
-    double quantity = 0;
-    double unitPrice = 0;
-
-    // Determine quantity and unit price based on selected unit
-    switch (unit) {
-      case 'Kg':
-        quantity = double.tryParse(_kgControllers[pid]?.text ?? "0") ?? 0;
-        unitPrice = product.kgPrice ?? product.offerPrice ?? product.price;
-        break;
-      case 'Piece':
-        quantity = double.tryParse(_pieceControllers[pid]?.text ?? "0") ?? 0;
-        unitPrice = product.pcsPrice ?? product.offerPrice ?? product.price;
-        break;
-      case 'Cartoon':
-        quantity = double.tryParse(_ctrControllers[pid]?.text ?? "0") ?? 0;
-        unitPrice = product.ctrPrice ?? product.offerPrice ?? product.price;
-        break;
+  Future<void> sendOrderWhatsAppMultiple(
+    List<Map<String, dynamic>> orders,
+    BuildContext context,
+    String buyerName, {
+    required String salesManId,
+  }) async {
+    final phoneNumber = whatsappNumber;
+    if (phoneNumber == null || phoneNumber.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("❌ WhatsApp number not available")),
+      );
+      return;
     }
 
-    double total = quantity * unitPrice;
-    grandTotal += total;
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    final salesMan = prefs.getString('username') ?? 'Sales Team';
 
-    String qtyDisplay = unit == 'Kg'
-        ? "${quantity.toStringAsFixed(2)} Kg"
-        : unit == 'Piece'
-            ? "${quantity.toInt()} pcs"
-            : "${quantity.toInt()} ctr";
+    double grandTotal = 0;
+    StringBuffer message = StringBuffer();
 
-    // Format columns
-    String itemName =
-        product.name.length > 14 ? product.name.substring(0, 14) : product.name.padRight(14);
-    String qtyText = qtyDisplay.padLeft(8);
-    String priceText = "QR ${unitPrice.toStringAsFixed(2)}".padLeft(10);
-    String totalText = "QR ${total.toStringAsFixed(2)}".padLeft(10);
-    String codeText = (product.itemCode).padLeft(8);
+    // Header
+    message.writeln("*ORDER CONFIRMATION*");
+    message.writeln("═══════════════════════════");
+    message.writeln();
+    message.writeln("Customer: *$buyerName*");
+    message.writeln("Sales Rep: $salesMan");
+    message.writeln("Date: ${_formatDate(DateTime.now())}");
+    message.writeln("Time: ${_formatTime(DateTime.now())}");
+    message.writeln();
+    message.writeln("───────────────────────────");
+    message.writeln();
 
-    message.writeln("`$itemName $qtyText $priceText $totalText $codeText`");
+    // Process each order item
+    for (int i = 0; i < orders.length; i++) {
+      final orderData = orders[i];
+      final product = orderData['product'] as Product;
+      final qty = orderData['qty'] as double;
+      final unit = orderData['unit'] as String;
+      final unitPrice = orderData['unitPrice'] as double;
+      final total = orderData['total'] as double;
 
-    // Update stock in Firestore
-    final newStock = product.stock - quantity.toInt();
-    await FirebaseFirestore.instance
-        .collection('products')
-        .doc(product.id)
-        .update({'stock': newStock});
-    product.stock = newStock;
+      grandTotal += total;
 
-    // Save order in Firestore
-    final orderRef = FirebaseFirestore.instance.collection('orders').doc();
-    await orderRef.set({
-      "buyer": buyerName,
-      "orderId": orderRef.id,
-      "salesManId": salesManId,
-      "productId": product.id,
-      "productName": product.name,
-      "unit": unit,
-      "quantity": quantity,
-      "unitPrice": unitPrice,
-      "total": total,
-      "timestamp": DateTime.now(),
-    });
+      // Item number and name
+      message.writeln("${i + 1}. *${product.name}*");
+
+      // Quantity with unit
+      String qtyDisplay;
+      if (unit == 'Kg') {
+        qtyDisplay = "${qty.toStringAsFixed(2)} Kg";
+      } else if (unit == 'Piece') {
+        qtyDisplay = "${qty.toInt()} Pcs";
+      } else {
+        qtyDisplay = "${qty.toInt()} Ctn";
+      }
+
+      message.writeln(
+        "   Qty: $qtyDisplay  |  Unit Price: QR ${unitPrice.toStringAsFixed(2)}",
+      );
+      message.writeln("   Total: *QR ${total.toStringAsFixed(2)}*");
+
+      // Item code if available
+      if (product.itemCode.isNotEmpty) {
+        message.writeln("   Code: ${product.itemCode}");
+      }
+
+      message.writeln();
+
+      // Update stock in Firestore
+      final newStock = product.stock - qty.toInt();
+      await FirebaseFirestore.instance
+          .collection('products')
+          .doc(product.id)
+          .update({'stock': newStock});
+
+      product.stock = newStock;
+
+      // Save order in Firestore
+      final orderRef = FirebaseFirestore.instance.collection('orders').doc();
+      await orderRef.set({
+        "buyer": buyerName,
+        "orderId": orderRef.id,
+        "salesManId": salesManId,
+        "salesManName": salesMan,
+        "productId": product.id,
+        "productName": product.name,
+        "itemCode": product.itemCode,
+        "unit": unit,
+        "quantity": qty,
+        "unitPrice": unitPrice,
+        "total": total,
+        "timestamp": DateTime.now(),
+        "status": "pending",
+      });
+    }
+
+    // Footer with total
+    message.writeln("───────────────────────────");
+    message.writeln();
+    message.writeln("Total Items: ${orders.length}");
+    message.writeln("*GRAND TOTAL: QR ${grandTotal.toStringAsFixed(2)}*");
+    message.writeln();
+    message.writeln("───────────────────────────");
+    message.writeln("Thank you for your order.");
+
+    // Launch WhatsApp
+    final url = Uri.parse(
+      "https://wa.me/$phoneNumber?text=${Uri.encodeComponent(message.toString())}",
+    );
+
+    try {
+      if (await canLaunchUrl(url)) {
+        await launchUrl(url, mode: LaunchMode.externalApplication);
+      } else {
+        throw "Could not launch WhatsApp";
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Failed to open WhatsApp: $e")));
+    }
   }
 
-  // Footer
-  message.writeln("━━━━━━━━━━━━━━━━━━━━━━");
-  message.writeln("*Grand Total:* QR${grandTotal.toStringAsFixed(2)}");
-
-  final url = Uri.parse(
-      "https://wa.me/$phoneNumber?text=${Uri.encodeComponent(message.toString())}");
-
-  if (await canLaunchUrl(url)) {
-    await launchUrl(url, mode: LaunchMode.externalApplication);
-  } else {
-    throw "Could not launch WhatsApp";
+  // Helper function to format date
+  String _formatDate(DateTime date) {
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    return "${date.day} ${months[date.month - 1]}, ${date.year}";
   }
-}
-Future<void> deleteOrder(String orderId) async {
-  try {
-    await _firestore.collection('orders').doc(orderId).delete();
 
-    // Remove locally
-    _orders.removeWhere((order) => order.orderId == orderId);
-    notifyListeners();
-  } catch (e) {
-    debugPrint("❌ Error deleting order: $e");
+  // Helper function to format time
+  String _formatTime(DateTime time) {
+    final hour = time.hour > 12
+        ? time.hour - 12
+        : (time.hour == 0 ? 12 : time.hour);
+    final minute = time.minute.toString().padLeft(2, '0');
+    final period = time.hour >= 12 ? 'PM' : 'AM';
+    return "$hour:$minute $period";
   }
-}
+
+  Future<void> deleteOrder(String orderId) async {
+    try {
+      await _firestore.collection('orders').doc(orderId).delete();
+
+      // Remove locally
+      _orders.removeWhere((order) => order.orderId == orderId);
+      notifyListeners();
+    } catch (e) {
+      debugPrint("❌ Error deleting order: $e");
+    }
+  }
 
   /// -------------------------------
   /// CLEAN UP LISTENERS
