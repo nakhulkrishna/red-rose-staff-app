@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:staff_app/features/auth/presentation/providers/salesman_market_provider.dart';
 import 'package:staff_app/features/customers/domain/entities/customer.dart';
-import 'package:staff_app/features/customers/presentation/pages/customers_list_page.dart';
 import 'package:staff_app/features/customers/presentation/providers/customers_provider.dart';
+import 'package:staff_app/features/orders/domain/entities/market_type.dart';
 import 'package:staff_app/features/orders/domain/entities/product_unit.dart';
 import 'package:staff_app/features/orders/presentation/pages/order_summary_page.dart';
 import 'package:staff_app/features/orders/presentation/providers/order_controller.dart';
 import 'package:staff_app/features/products/domain/entities/product.dart';
 import 'package:staff_app/features/products/presentation/providers/product_list_provider.dart';
+import 'package:staff_app/shared/widgets/price_mode_banner.dart';
 
 class OrderCreationPage extends ConsumerStatefulWidget {
   const OrderCreationPage({super.key});
@@ -23,6 +25,14 @@ class _OrderCreationPageState extends ConsumerState<OrderCreationPage> {
   String _query = '';
   _FilterType _filterType = _FilterType.all;
   String? _selectedCategory;
+  final TextEditingController _searchController = TextEditingController();
+  final List<String> _recentCustomerIds = <String>[];
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -30,22 +40,88 @@ class _OrderCreationPageState extends ConsumerState<OrderCreationPage> {
     final cart = ref.watch(cartProvider);
     final total = ref.watch(orderGrandTotalProvider);
     final productsAsync = ref.watch(productsProvider);
+    final allCustomers = ref.watch(customersProvider);
+    final marketContextAsync = ref.watch(salesmanMarketContextProvider);
+    final marketType =
+        marketContextAsync.valueOrNull?.marketType ?? MarketType.local;
+    final priceModeLabel =
+        marketContextAsync.valueOrNull?.priceModeLabel ?? 'Local Market';
+    final recentCustomers = _recentCustomerIds
+        .map((id) {
+          for (final customer in allCustomers) {
+            if (customer.id == id) return customer;
+          }
+          return null;
+        })
+        .whereType<Customer>()
+        .toList();
 
     return Scaffold(
       appBar: AppBar(title: const Text('Create Order')),
       body: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
-            child: _CustomerChip(customer: customer, onChange: _selectCustomer),
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+            child: PriceModeBanner(label: priceModeLabel),
           ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+            child: _CustomerChip(
+              customer: customer,
+              onChange: _selectCustomer,
+              onClear: customer == null
+                  ? null
+                  : () => ref.read(selectedCustomerProvider.notifier).state =
+                        null,
+            ),
+          ),
+          if (recentCustomers.isNotEmpty)
+            SizedBox(
+              height: 40,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                children: recentCustomers.map((recent) {
+                  final isSelected = customer?.id == recent.id;
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: ActionChip(
+                      avatar: Icon(
+                        isSelected
+                            ? Icons.check_circle
+                            : Icons.history_toggle_off_outlined,
+                        size: 16,
+                        color: isSelected
+                            ? const Color(0xFF0F766E)
+                            : const Color(0xFF6B7280),
+                      ),
+                      label: Text(recent.name),
+                      onPressed: () {
+                        ref.read(selectedCustomerProvider.notifier).state =
+                            recent;
+                      },
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
             child: TextField(
+              controller: _searchController,
               onChanged: (value) => setState(() => _query = value.trim()),
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 prefixIcon: Icon(Icons.search),
                 hintText: 'Search products',
+                suffixIcon: _query.isEmpty
+                    ? null
+                    : IconButton(
+                        onPressed: () {
+                          _searchController.clear();
+                          setState(() => _query = '');
+                        },
+                        icon: const Icon(Icons.close),
+                      ),
               ),
             ),
           ),
@@ -74,24 +150,57 @@ class _OrderCreationPageState extends ConsumerState<OrderCreationPage> {
             child: productsAsync.when(
               data: (products) {
                 final filtered = _applyFilters(products);
+                final inStockCount = filtered
+                    .where((p) => p.availableStock > 0)
+                    .length;
                 if (filtered.isEmpty) {
                   return const Center(child: Text('No products found.'));
                 }
-                return ListView.builder(
-                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 90),
-                  itemCount: filtered.length,
-                  itemBuilder: (context, index) {
-                    final product = filtered[index];
-                    final addedCount = cart
-                        .where((line) => line.productId == product.id)
-                        .length;
-                    return _ProductOrderCard(
-                      product: product,
-                      addedCount: addedCount,
-                      customer: customer,
-                      onAdd: () => _addDefault(product, customer),
-                    );
-                  },
+                return Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 2, 12, 0),
+                      child: Row(
+                        children: [
+                          _StatPill(
+                            icon: Icons.view_list_outlined,
+                            label: '${filtered.length} products',
+                          ),
+                          const SizedBox(width: 8),
+                          _StatPill(
+                            icon: Icons.inventory_2_outlined,
+                            label: '$inStockCount in stock',
+                          ),
+                          const Spacer(),
+                          _StatPill(
+                            icon: Icons.shopping_cart_outlined,
+                            label: '${cart.length} in cart',
+                          ),
+                        ],
+                      ),
+                    ),
+                    Expanded(
+                      child: ListView.builder(
+                        padding: const EdgeInsets.fromLTRB(12, 8, 12, 90),
+                        itemCount: filtered.length,
+                        cacheExtent: 720,
+                        addAutomaticKeepAlives: false,
+                        itemBuilder: (context, index) {
+                          final product = filtered[index];
+                          final addedCount = cart
+                              .where((line) => line.productId == product.id)
+                              .length;
+                          return _ProductOrderCard(
+                            product: product,
+                            addedCount: addedCount,
+                            customer: customer,
+                            onAdd: () =>
+                                _addDefault(product, customer, marketType),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
                 );
               },
               loading: () => const Center(child: CircularProgressIndicator()),
@@ -114,14 +223,30 @@ class _OrderCreationPageState extends ConsumerState<OrderCreationPage> {
         child: Row(
           children: [
             Expanded(
-              child: Text(
-                '${cart.length} items  |  QAR ${total.toStringAsFixed(2)}',
-                style: const TextStyle(fontWeight: FontWeight.w700),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '${cart.length} items',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF6B7280),
+                    ),
+                  ),
+                  Text(
+                    'QAR ${total.toStringAsFixed(2)}',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 18,
+                    ),
+                  ),
+                ],
               ),
             ),
             OutlinedButton(
               onPressed: cart.isEmpty ? null : _openCartEditor,
-              child: const Text('Cart'),
+              child: const Text('Edit Cart'),
             ),
             const SizedBox(width: 8),
             FilledButton(
@@ -142,7 +267,7 @@ class _OrderCreationPageState extends ConsumerState<OrderCreationPage> {
                         ),
                       );
                     },
-              child: const Text('Review Order'),
+              child: const Text('Review'),
             ),
           ],
         ),
@@ -174,17 +299,150 @@ class _OrderCreationPageState extends ConsumerState<OrderCreationPage> {
   }
 
   Future<void> _selectCustomer() async {
-    final selected = await Navigator.of(context).push<Customer>(
-      MaterialPageRoute(
-        builder: (_) => const CustomersListPage(selectionMode: true),
-      ),
-    );
+    final selected = await _openCustomerPicker();
     if (selected != null) {
       ref.read(selectedCustomerProvider.notifier).state = selected;
+      _rememberRecentCustomer(selected);
     }
   }
 
-  void _addDefault(Product product, Customer? customer) {
+  Future<Customer?> _openCustomerPicker() async {
+    var query = '';
+    return showModalBottomSheet<Customer>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Consumer(
+              builder: (context, ref, _) {
+                final customersAsync = ref.watch(customersStreamProvider);
+                final currentSelected = ref.watch(selectedCustomerProvider);
+                return FractionallySizedBox(
+                  heightFactor: 0.86,
+                  child: SafeArea(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 6, 12, 12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Select Customer',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 18,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          TextField(
+                            onChanged: (value) => setModalState(
+                              () => query = value.trim().toLowerCase(),
+                            ),
+                            decoration: const InputDecoration(
+                              hintText: 'Search by name or phone',
+                              prefixIcon: Icon(Icons.search),
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Expanded(
+                            child: customersAsync.when(
+                              loading: () => const Center(
+                                child: CircularProgressIndicator(),
+                              ),
+                              error: (error, _) =>
+                                  Center(child: Text('Failed to load: $error')),
+                              data: (customers) {
+                                final filtered = customers.where((c) {
+                                  if (query.isEmpty) return true;
+                                  return c.name.toLowerCase().contains(query) ||
+                                      c.phone.toLowerCase().contains(query);
+                                }).toList();
+                                if (filtered.isEmpty) {
+                                  return const Center(
+                                    child: Text('No customers found'),
+                                  );
+                                }
+                                return ListView.separated(
+                                  itemCount: filtered.length,
+                                  separatorBuilder: (_, __) =>
+                                      const SizedBox(height: 8),
+                                  itemBuilder: (context, index) {
+                                    final customer = filtered[index];
+                                    final isSelected =
+                                        currentSelected?.id == customer.id;
+                                    return Container(
+                                      decoration: BoxDecoration(
+                                        color: Colors.white,
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(
+                                          color: isSelected
+                                              ? const Color(0xFF0F766E)
+                                              : const Color(0xFFE5E7EB),
+                                          width: isSelected ? 1.6 : 1,
+                                        ),
+                                      ),
+                                      child: ListTile(
+                                        onTap: () =>
+                                            Navigator.of(context).pop(customer),
+                                        leading: CircleAvatar(
+                                          backgroundColor: isSelected
+                                              ? const Color(0xFFECFDF5)
+                                              : const Color(0xFFF3F4F6),
+                                          child: Icon(
+                                            Icons.person_outline,
+                                            color: isSelected
+                                                ? const Color(0xFF0F766E)
+                                                : null,
+                                          ),
+                                        ),
+                                        title: Text(
+                                          customer.name,
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                        subtitle: Text(
+                                          '${customer.phone}\nOutstanding QAR ${customer.outstandingBalance.toStringAsFixed(2)}',
+                                        ),
+                                        isThreeLine: true,
+                                        trailing: isSelected
+                                            ? const Icon(
+                                                Icons.check_circle,
+                                                color: Color(0xFF0F766E),
+                                              )
+                                            : const Icon(Icons.chevron_right),
+                                      ),
+                                    );
+                                  },
+                                );
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              },
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _rememberRecentCustomer(Customer customer) {
+    setState(() {
+      _recentCustomerIds.remove(customer.id);
+      _recentCustomerIds.insert(0, customer.id);
+      if (_recentCustomerIds.length > 5) {
+        _recentCustomerIds.removeRange(5, _recentCustomerIds.length);
+      }
+    });
+  }
+
+  void _addDefault(Product product, Customer? customer, MarketType marketType) {
     if (customer == null) {
       ScaffoldMessenger.of(
         context,
@@ -194,12 +452,7 @@ class _OrderCreationPageState extends ConsumerState<OrderCreationPage> {
     final unit = product.units.first;
     final error = ref
         .read(cartProvider.notifier)
-        .addItem(
-          product: product,
-          unit: unit,
-          quantity: 1,
-          market: customer.marketType,
-        );
+        .addItem(product: product, unit: unit, quantity: 1, market: marketType);
     if (error != null) {
       ScaffoldMessenger.of(
         context,
@@ -210,6 +463,7 @@ class _OrderCreationPageState extends ConsumerState<OrderCreationPage> {
   Future<void> _openCartEditor() async {
     final customer = ref.read(selectedCustomerProvider);
     if (customer == null) return;
+    final marketType = ref.read(salesmanMarketTypeProvider);
 
     await showModalBottomSheet<void>(
       context: context,
@@ -296,6 +550,21 @@ class _OrderCreationPageState extends ConsumerState<OrderCreationPage> {
                                                         .toList(),
                                                     onChanged: (value) {
                                                       if (value == null) return;
+                                                      final latestCart = ref
+                                                          .read(cartProvider);
+                                                      final latestIndex =
+                                                          latestCart.indexWhere(
+                                                            (e) =>
+                                                                e.lineId ==
+                                                                line.lineId,
+                                                          );
+                                                      if (latestIndex < 0) {
+                                                        setModalState(() {});
+                                                        setState(() {});
+                                                        return;
+                                                      }
+                                                      final latestLine =
+                                                          latestCart[latestIndex];
                                                       final error = ref
                                                           .read(
                                                             cartProvider
@@ -305,10 +574,9 @@ class _OrderCreationPageState extends ConsumerState<OrderCreationPage> {
                                                             lineId: line.lineId,
                                                             product: product,
                                                             unit: value,
-                                                            quantity:
-                                                                line.quantity,
-                                                            market: customer
-                                                                .marketType,
+                                                            quantity: latestLine
+                                                                .quantity,
+                                                            market: marketType,
                                                           );
                                                       if (error != null) {
                                                         ScaffoldMessenger.of(
@@ -329,18 +597,42 @@ class _OrderCreationPageState extends ConsumerState<OrderCreationPage> {
                                             _QtyStepper(
                                               qty: line.quantity,
                                               onDecrement: () {
-                                                final next = line.quantity > 1
-                                                    ? line.quantity - 1
+                                                final latestCart = ref.read(
+                                                  cartProvider,
+                                                );
+                                                final latestIndex = latestCart
+                                                    .indexWhere(
+                                                      (e) =>
+                                                          e.lineId ==
+                                                          line.lineId,
+                                                    );
+                                                if (latestIndex < 0) {
+                                                  setModalState(() {});
+                                                  setState(() {});
+                                                  return;
+                                                }
+                                                final latestLine =
+                                                    latestCart[latestIndex];
+                                                final latestUnit = product.units
+                                                    .firstWhere(
+                                                      (u) =>
+                                                          u.code ==
+                                                          latestLine.unitCode,
+                                                      orElse: () =>
+                                                          product.units.first,
+                                                    );
+                                                final next =
+                                                    latestLine.quantity > 1
+                                                    ? latestLine.quantity - 1
                                                     : 1.0;
                                                 final error = ref
                                                     .read(cartProvider.notifier)
                                                     .updateItem(
                                                       lineId: line.lineId,
                                                       product: product,
-                                                      unit: unit,
+                                                      unit: latestUnit,
                                                       quantity: next,
-                                                      market:
-                                                          customer.marketType,
+                                                      market: marketType,
                                                     );
                                                 if (error != null) {
                                                   ScaffoldMessenger.of(
@@ -355,16 +647,40 @@ class _OrderCreationPageState extends ConsumerState<OrderCreationPage> {
                                                 setState(() {});
                                               },
                                               onIncrement: () {
+                                                final latestCart = ref.read(
+                                                  cartProvider,
+                                                );
+                                                final latestIndex = latestCart
+                                                    .indexWhere(
+                                                      (e) =>
+                                                          e.lineId ==
+                                                          line.lineId,
+                                                    );
+                                                if (latestIndex < 0) {
+                                                  setModalState(() {});
+                                                  setState(() {});
+                                                  return;
+                                                }
+                                                final latestLine =
+                                                    latestCart[latestIndex];
+                                                final latestUnit = product.units
+                                                    .firstWhere(
+                                                      (u) =>
+                                                          u.code ==
+                                                          latestLine.unitCode,
+                                                      orElse: () =>
+                                                          product.units.first,
+                                                    );
                                                 final error = ref
                                                     .read(cartProvider.notifier)
                                                     .updateItem(
                                                       lineId: line.lineId,
                                                       product: product,
-                                                      unit: unit,
+                                                      unit: latestUnit,
                                                       quantity:
-                                                          line.quantity + 1,
-                                                      market:
-                                                          customer.marketType,
+                                                          latestLine.quantity +
+                                                          1,
+                                                      market: marketType,
                                                     );
                                                 if (error != null) {
                                                   ScaffoldMessenger.of(
@@ -429,10 +745,15 @@ class _OrderCreationPageState extends ConsumerState<OrderCreationPage> {
 }
 
 class _CustomerChip extends StatelessWidget {
-  const _CustomerChip({required this.customer, required this.onChange});
+  const _CustomerChip({
+    required this.customer,
+    required this.onChange,
+    this.onClear,
+  });
 
   final Customer? customer;
   final VoidCallback onChange;
+  final VoidCallback? onClear;
 
   @override
   Widget build(BuildContext context) {
@@ -445,15 +766,49 @@ class _CustomerChip extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Expanded(
-            child: Text(
-              customer == null
-                  ? 'Customer: Not selected'
-                  : 'Customer: ${customer!.name}',
-              style: const TextStyle(fontWeight: FontWeight.w700),
+          Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              color: const Color(0xFFF3F4F6),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(
+              customer == null ? Icons.person_search : Icons.person_outline,
             ),
           ),
-          TextButton(onPressed: onChange, child: const Text('Change')),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  customer == null ? 'Customer not selected' : customer!.name,
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  customer == null
+                      ? 'Select a customer before reviewing order'
+                      : '${customer!.phone} • Outstanding QAR ${customer!.outstandingBalance.toStringAsFixed(2)}',
+                  style: const TextStyle(
+                    color: Color(0xFF6B7280),
+                    fontSize: 12.5,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          TextButton(
+            onPressed: onChange,
+            child: Text(customer == null ? 'Select' : 'Change'),
+          ),
+          if (onClear != null)
+            IconButton(
+              onPressed: onClear,
+              icon: const Icon(Icons.clear, size: 18),
+              tooltip: 'Clear customer',
+            ),
         ],
       ),
     );
@@ -558,6 +913,11 @@ class _ProductOrderCard extends StatelessWidget {
 
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: const BorderSide(color: Color(0xFFE5E7EB)),
+      ),
       child: Padding(
         padding: const EdgeInsets.all(10),
         child: Column(
@@ -596,6 +956,15 @@ class _ProductOrderCard extends StatelessWidget {
                       Text(
                         product.code,
                         style: const TextStyle(color: Color(0xFF6B7280)),
+                      ),
+                      const SizedBox(height: 4),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: [
+                          _tag(product.category),
+                          _tag('Base: ${product.baseUnit}'),
+                        ],
                       ),
                       const SizedBox(height: 6),
                       Row(
@@ -681,6 +1050,50 @@ class _ProductOrderCard extends StatelessWidget {
       ),
     );
   }
+
+  Widget _tag(String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF3F4F6),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600),
+      ),
+    );
+  }
+}
+
+class _StatPill extends StatelessWidget {
+  const _StatPill({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF9FAFB),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: const Color(0xFF374151)),
+          const SizedBox(width: 5),
+          Text(
+            label,
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _QtyStepper extends StatelessWidget {
@@ -739,11 +1152,16 @@ class _CardImage extends StatelessWidget {
         child: const Icon(Icons.image_outlined),
       );
     }
+    final pixelRatio = MediaQuery.of(context).devicePixelRatio;
+    final targetPixels = (70 * pixelRatio).round().clamp(1, 1024);
     return Image.network(
       url,
       width: 70,
       height: 70,
+      cacheWidth: targetPixels,
+      cacheHeight: targetPixels,
       fit: BoxFit.cover,
+      filterQuality: FilterQuality.low,
       errorBuilder: (_, __, ___) => Container(
         width: 70,
         height: 70,
@@ -802,6 +1220,11 @@ class _OrderProductImageViewerPageState
               itemCount: widget.imageUrls.length,
               onPageChanged: (value) => setState(() => _index = value),
               itemBuilder: (context, index) {
+                final mediaSize = MediaQuery.sizeOf(context);
+                final pixelRatio = MediaQuery.of(context).devicePixelRatio;
+                final cacheWidth = (mediaSize.width * pixelRatio * 2)
+                    .round()
+                    .clamp(1, 2500);
                 return InteractiveViewer(
                   minScale: 1,
                   maxScale: 4,
@@ -809,6 +1232,8 @@ class _OrderProductImageViewerPageState
                     child: Image.network(
                       widget.imageUrls[index],
                       fit: BoxFit.contain,
+                      cacheWidth: cacheWidth,
+                      filterQuality: FilterQuality.low,
                       errorBuilder: (_, __, ___) => const Icon(
                         Icons.broken_image_outlined,
                         color: Colors.white70,

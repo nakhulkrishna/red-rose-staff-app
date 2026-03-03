@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:staff_app/features/auth/presentation/providers/salesman_market_provider.dart';
 import 'package:staff_app/features/customers/presentation/providers/customers_provider.dart';
 import 'package:staff_app/features/orders/domain/entities/cart_item.dart';
 import 'package:staff_app/features/orders/domain/entities/product_unit.dart';
 import 'package:staff_app/features/orders/presentation/providers/order_controller.dart';
+import 'package:staff_app/shared/widgets/price_mode_banner.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class OrderSummaryPage extends ConsumerStatefulWidget {
@@ -23,12 +25,16 @@ class _OrderSummaryPageState extends ConsumerState<OrderSummaryPage> {
     final grandTotal = ref.watch(orderGrandTotalProvider);
     final submitState = ref.watch(orderSubmissionControllerProvider);
     final isSubmitting = submitState.isLoading;
+    final marketContext = ref.watch(salesmanMarketContextProvider).valueOrNull;
+    final priceModeLabel = marketContext?.priceModeLabel ?? 'Local Market';
 
     return Scaffold(
       appBar: AppBar(title: const Text('Review Order')),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(12, 10, 12, 120),
         children: [
+          PriceModeBanner(label: priceModeLabel),
+          const SizedBox(height: 10),
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
@@ -50,23 +56,44 @@ class _OrderSummaryPageState extends ConsumerState<OrderSummaryPage> {
             ),
           ),
           const SizedBox(height: 10),
-          ...cart.map(
-            (line) => Card(
-              child: ListTile(
-                title: Text(line.productName),
-                subtitle: Text(
-                  '${line.unitCode} • Qty ${line.quantity} • Applied QAR ${line.appliedPriceQar.toStringAsFixed(2)}',
-                ),
-                trailing: Text('QAR ${line.total.toStringAsFixed(2)}'),
-                onTap: () => _editLine(line),
-                leading: IconButton(
-                  onPressed: () =>
-                      ref.read(cartProvider.notifier).removeItem(line.lineId),
-                  icon: const Icon(Icons.delete_outline),
-                ),
+          if (cart.isEmpty)
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFE5E7EB)),
+              ),
+              child: const Column(
+                children: [
+                  Icon(
+                    Icons.remove_shopping_cart_outlined,
+                    size: 36,
+                    color: Color(0xFF9CA3AF),
+                  ),
+                  SizedBox(height: 8),
+                  Text(
+                    'Your cart is empty',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  SizedBox(height: 4),
+                  Text(
+                    'Go back and add products to place this order.',
+                    style: TextStyle(color: Color(0xFF6B7280)),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            )
+          else
+            ...cart.map(
+              (line) => _OrderLineCard(
+                line: line,
+                onEdit: () => _editLine(line),
+                onRemove: () =>
+                    ref.read(cartProvider.notifier).removeItem(line.lineId),
               ),
             ),
-          ),
         ],
       ),
       bottomNavigationBar: Container(
@@ -89,7 +116,9 @@ class _OrderSummaryPageState extends ConsumerState<OrderSummaryPage> {
             SizedBox(
               width: double.infinity,
               child: FilledButton(
-                onPressed: isSubmitting ? null : _placeOrderAndSendBill,
+                onPressed: cart.isEmpty || isSubmitting
+                    ? null
+                    : _placeOrderAndSendBill,
                 child: isSubmitting
                     ? const SizedBox(
                         width: 18,
@@ -131,6 +160,7 @@ class _OrderSummaryPageState extends ConsumerState<OrderSummaryPage> {
   Future<void> _editLine(CartItem line) async {
     final product = ref.read(productByIdProvider(line.productId));
     final customer = ref.read(selectedCustomerProvider);
+    final marketType = ref.read(salesmanMarketTypeProvider);
     if (product == null || customer == null) return;
 
     ProductUnit unit = product.units.firstWhere((u) => u.code == line.unitCode);
@@ -188,7 +218,7 @@ class _OrderSummaryPageState extends ConsumerState<OrderSummaryPage> {
           product: product,
           unit: unit,
           quantity: qty,
-          market: customer.marketType,
+          market: marketType,
         );
     if (error != null) {
       ScaffoldMessenger.of(
@@ -245,5 +275,98 @@ class _OrderSummaryPageState extends ConsumerState<OrderSummaryPage> {
       context,
     ).showSnackBar(SnackBar(content: Text('Order placed: ${result.orderId}')));
     Navigator.of(context).pop();
+  }
+}
+
+class _OrderLineCard extends StatelessWidget {
+  const _OrderLineCard({
+    required this.line,
+    required this.onEdit,
+    required this.onRemove,
+  });
+
+  final CartItem line;
+  final VoidCallback onEdit;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: const BorderSide(color: Color(0xFFE5E7EB)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    line.productName,
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                ),
+                Text(
+                  'QAR ${line.total.toStringAsFixed(2)}',
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _badge('Unit: ${line.unitCode}'),
+                _badge('Qty: ${line.quantity}'),
+                _badge('Price: ${line.appliedPriceQar.toStringAsFixed(2)}'),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                TextButton.icon(
+                  onPressed: onEdit,
+                  icon: const Icon(Icons.edit_outlined, size: 18),
+                  label: const Text('Edit'),
+                ),
+                const SizedBox(width: 6),
+                TextButton.icon(
+                  onPressed: onRemove,
+                  icon: const Icon(
+                    Icons.delete_outline,
+                    size: 18,
+                    color: Color(0xFFB91C1C),
+                  ),
+                  label: const Text(
+                    'Remove',
+                    style: TextStyle(color: Color(0xFFB91C1C)),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _badge(String text) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF3F4F6),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        text,
+        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
+      ),
+    );
   }
 }

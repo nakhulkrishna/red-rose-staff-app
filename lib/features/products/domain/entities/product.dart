@@ -10,11 +10,14 @@ class Product {
   final String imageUrl;
   final String baseUnit;
   final Map<MarketType, double> marketPrices;
+  final Map<MarketType, Map<String, double>> marketUnitPrices;
+  final Map<MarketType, Map<String, double>> marketUnitOfferPrices;
   final List<ProductUnit> units;
   final double priceQar;
   final double offerPriceQar;
   final double availableStock;
   final List<String> imageUrls;
+  final bool hasMarketPriceConfigured;
 
   const Product({
     required this.id,
@@ -25,10 +28,13 @@ class Product {
     required this.imageUrl,
     required this.baseUnit,
     required this.marketPrices,
+    this.marketUnitPrices = const {},
+    this.marketUnitOfferPrices = const {},
     required this.units,
     this.priceQar = 0,
     this.offerPriceQar = 0,
     this.availableStock = 0,
     this.imageUrls = const [],
+    this.hasMarketPriceConfigured = true,
   });
 }

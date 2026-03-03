@@ -22,6 +22,7 @@ class _OrdersOverviewPageState extends ConsumerState<OrdersOverviewPage> {
   @override
   Widget build(BuildContext context) {
     final orders = ref.watch(orderHistoryProvider).valueOrNull ?? const [];
+    final selectedCustomer = ref.watch(selectedCustomerProvider);
     final filtered =
         orders.where((order) {
           final q = _query.trim().toLowerCase();
@@ -135,21 +136,7 @@ class _OrdersOverviewPageState extends ConsumerState<OrdersOverviewPage> {
             child: SizedBox(
               width: double.infinity,
               child: FilledButton.icon(
-                onPressed: () async {
-                  final selected = await Navigator.of(context).push<Customer>(
-                    MaterialPageRoute(
-                      builder: (_) =>
-                          const CustomersListPage(selectionMode: true),
-                    ),
-                  );
-                  if (!context.mounted || selected == null) return;
-                  ref.read(selectedCustomerProvider.notifier).state = selected;
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => const OrderCreationPage(),
-                    ),
-                  );
-                },
+                onPressed: _startCreateOrder,
                 style: FilledButton.styleFrom(
                   backgroundColor: const Color(0xFF1F2937),
                   foregroundColor: Colors.white,
@@ -159,13 +146,39 @@ class _OrdersOverviewPageState extends ConsumerState<OrdersOverviewPage> {
                   ),
                 ),
                 icon: const Icon(Icons.add),
-                label: const Text('Create order'),
+                label: Text(
+                  selectedCustomer == null
+                      ? 'Create order'
+                      : 'Create order for ${selectedCustomer.name}',
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ),
           ),
         ],
       ),
     );
+  }
+
+  Future<void> _startCreateOrder() async {
+    final alreadySelected = ref.read(selectedCustomerProvider);
+    if (alreadySelected != null) {
+      Navigator.of(
+        context,
+      ).push(MaterialPageRoute(builder: (_) => const OrderCreationPage()));
+      return;
+    }
+
+    final selected = await Navigator.of(context).push<Customer>(
+      MaterialPageRoute(
+        builder: (_) => const CustomersListPage(selectionMode: true),
+      ),
+    );
+    if (!mounted || selected == null) return;
+    ref.read(selectedCustomerProvider.notifier).state = selected;
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const OrderCreationPage()));
   }
 
   bool _isSameDay(DateTime a, DateTime b) {

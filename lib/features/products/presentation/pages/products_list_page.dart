@@ -1,8 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:staff_app/features/auth/presentation/providers/salesman_market_provider.dart';
 import 'package:staff_app/features/products/domain/entities/product.dart';
 import 'package:staff_app/features/products/presentation/providers/product_list_provider.dart';
+import 'package:staff_app/shared/widgets/price_mode_banner.dart';
+
+final NumberFormat _qarMoney = NumberFormat.currency(
+  name: 'QAR',
+  symbol: 'QAR ',
+  decimalDigits: 2,
+);
 
 class ProductsListPage extends ConsumerStatefulWidget {
   const ProductsListPage({super.key});
@@ -17,11 +25,18 @@ class _ProductsListPageState extends ConsumerState<ProductsListPage> {
   @override
   Widget build(BuildContext context) {
     final productsAsync = ref.watch(productsProvider);
+    final priceModeLabel =
+        ref.watch(salesmanMarketContextProvider).valueOrNull?.priceModeLabel ??
+        'Local Market';
 
     return Scaffold(
       appBar: AppBar(title: const Text('Products Catalog')),
       body: Column(
         children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+            child: PriceModeBanner(label: priceModeLabel),
+          ),
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
             child: TextField(
@@ -112,6 +127,8 @@ class _ProductsTable extends StatelessWidget {
                 Expanded(
                   child: ListView.separated(
                     itemCount: products.length,
+                    cacheExtent: 720,
+                    addAutomaticKeepAlives: false,
                     separatorBuilder: (_, __) =>
                         const Divider(height: 1, thickness: 1),
                     itemBuilder: (context, index) =>
@@ -134,11 +151,6 @@ class _ProductRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final money = NumberFormat.currency(
-      name: 'QAR',
-      symbol: 'QAR ',
-      decimalDigits: 2,
-    );
     final imageUrls = product.imageUrls.isEmpty
         ? (product.imageUrl.isNotEmpty ? [product.imageUrl] : <String>[])
         : product.imageUrls;
@@ -180,9 +192,9 @@ class _ProductRow extends StatelessWidget {
           ),
           _Cell(text: product.code, width: 130),
           _Cell(text: product.name, width: 230),
-          _Cell(text: money.format(product.priceQar), width: 120),
+          _Cell(text: _qarMoney.format(product.priceQar), width: 120),
           _Cell(
-            text: showOffer ? money.format(offer) : '-',
+            text: showOffer ? _qarMoney.format(offer) : '-',
             width: 130,
             color: showOffer ? const Color(0xFFB91C1C) : null,
             bold: showOffer,
@@ -238,6 +250,9 @@ class _ProductThumb extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final pixelRatio = MediaQuery.of(context).devicePixelRatio;
+    final targetPixels = (size * pixelRatio).round().clamp(1, 1024);
+
     if (url.isEmpty) {
       return Container(
         width: size,
@@ -252,7 +267,10 @@ class _ProductThumb extends StatelessWidget {
       url,
       width: size,
       height: size,
+      cacheWidth: targetPixels,
+      cacheHeight: targetPixels,
       fit: BoxFit.cover,
+      filterQuality: FilterQuality.low,
       errorBuilder: (_, __, ___) {
         return Container(
           width: size,
@@ -303,7 +321,11 @@ class _ProductImageViewerPageState extends State<ProductImageViewerPage> {
   @override
   void initState() {
     super.initState();
-    _index = widget.initialIndex.clamp(0, widget.imageUrls.length - 1);
+    if (widget.imageUrls.isEmpty) {
+      _index = 0;
+    } else {
+      _index = widget.initialIndex.clamp(0, widget.imageUrls.length - 1);
+    }
     _controller = PageController(initialPage: _index);
   }
 
@@ -330,6 +352,12 @@ class _ProductImageViewerPageState extends State<ProductImageViewerPage> {
               itemCount: widget.imageUrls.length,
               onPageChanged: (value) => setState(() => _index = value),
               itemBuilder: (context, index) {
+                final mediaSize = MediaQuery.sizeOf(context);
+                final pixelRatio = MediaQuery.of(context).devicePixelRatio;
+                final cacheWidth = (mediaSize.width * pixelRatio * 2)
+                    .round()
+                    .clamp(1, 2500);
+
                 return InteractiveViewer(
                   minScale: 1,
                   maxScale: 4,
@@ -337,6 +365,8 @@ class _ProductImageViewerPageState extends State<ProductImageViewerPage> {
                     child: Image.network(
                       widget.imageUrls[index],
                       fit: BoxFit.contain,
+                      cacheWidth: cacheWidth,
+                      filterQuality: FilterQuality.low,
                       errorBuilder: (_, __, ___) => const Icon(
                         Icons.broken_image_outlined,
                         color: Colors.white70,

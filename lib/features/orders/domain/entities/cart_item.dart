@@ -11,6 +11,7 @@ class CartItem {
   final double regularPriceQar;
   final double offerPriceQar;
   final double appliedPriceQar;
+  final String appliedMarketKey;
 
   const CartItem({
     required this.lineId,
@@ -25,6 +26,7 @@ class CartItem {
     required this.regularPriceQar,
     required this.offerPriceQar,
     required this.appliedPriceQar,
+    required this.appliedMarketKey,
   });
 
   double get total => quantity * unitPrice;
@@ -40,6 +42,7 @@ class CartItem {
     double? regularPriceQar,
     double? offerPriceQar,
     double? appliedPriceQar,
+    String? appliedMarketKey,
   }) {
     return CartItem(
       lineId: lineId,
@@ -54,6 +57,7 @@ class CartItem {
       regularPriceQar: regularPriceQar ?? this.regularPriceQar,
       offerPriceQar: offerPriceQar ?? this.offerPriceQar,
       appliedPriceQar: appliedPriceQar ?? this.appliedPriceQar,
+      appliedMarketKey: appliedMarketKey ?? this.appliedMarketKey,
     );
   }
 }

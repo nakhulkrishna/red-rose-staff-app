@@ -63,6 +63,6 @@ class DefaultFirebaseOptions {
     messagingSenderId: '720358492427',
     projectId: 'products-managment-a23a7',
     storageBucket: 'products-managment-a23a7.firebasestorage.app',
-    iosBundleId: 'com.example.staffApp',
+    iosBundleId: 'com.infynixsystem.redrosestaff',
   );
 }

@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:intl/intl.dart';
 import 'package:staff_app/features/auth/data/models/app_user_model.dart';
 
 class AuthRemoteDataSource {
@@ -66,9 +67,10 @@ class AuthRemoteDataSource {
     final staffCode = await _generateNextStaffCode();
     final cleanedName = name.trim();
     final cleanedEmail = email.trim();
-
-    await _firestore.collection(_salesmenCollection).doc(staffCode).set({
+    final now = FieldValue.serverTimestamp();
+    final staffPayload = <String, dynamic>{
       'id': staffCode,
+      'uid': user.uid,
       'name': cleanedName,
       'nameLower': cleanedName.toLowerCase(),
       'region': region,
@@ -76,13 +78,27 @@ class AuthRemoteDataSource {
       'email': cleanedEmail,
       'role': 'Salesman',
       'status': 'active',
+      'isActive': true,
+      'approvalStatus': 'approved',
+      'accountStatus': 'active',
+      'banUntil': null,
+      'banReason': null,
       'imageUrl': null,
       'achievedSalesQar': 0,
       'monthlyTargetQar': 0,
       'dealsClosed': 0,
-      'createdAt': FieldValue.serverTimestamp(),
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
+      'createdAt': now,
+      'updatedAt': now,
+    };
+
+    await _firestore
+        .collection(_salesmenCollection)
+        .doc(staffCode)
+        .set(staffPayload, SetOptions(merge: true));
+    await _firestore
+        .collection(_salesmenCollection)
+        .doc(user.uid)
+        .set(staffPayload, SetOptions(merge: true));
 
     return _buildUser(user);
   }
@@ -92,17 +108,15 @@ class AuthRemoteDataSource {
   }
 
   Future<AppUserModel> _buildUser(User user) async {
+    await _enforceBanPolicy(user);
+
     final email = user.email ?? '';
-    Map<String, dynamic> data = <String, dynamic>{};
-    if (email.isNotEmpty) {
-      final byEmail = await _firestore
-          .collection(_salesmenCollection)
-          .where('email', isEqualTo: email)
-          .limit(1)
-          .get();
-      if (byEmail.docs.isNotEmpty) {
-        data = byEmail.docs.first.data();
-      }
+    Map<String, dynamic> data = const <String, dynamic>{};
+    try {
+      final staffDoc = await _findSalesmanDoc(user);
+      data = staffDoc?.data ?? const <String, dynamic>{};
+    } on FirebaseException catch (e) {
+      if (!_isPermissionDenied(e)) rethrow;
     }
 
     final name = (data['name'] as String?) ?? (user.displayName ?? '');
@@ -116,6 +130,86 @@ class AuthRemoteDataSource {
       region: region,
       phone: phone,
     );
+  }
+
+  Future<void> _enforceBanPolicy(User user) async {
+    _SalesmanDocHit? staffDoc;
+    try {
+      staffDoc = await _findSalesmanDoc(user);
+    } on FirebaseException catch (e) {
+      if (_isPermissionDenied(e)) return;
+      rethrow;
+    }
+    if (staffDoc == null) {
+      return;
+    }
+
+    final data = staffDoc.data;
+    final accountStatus = ((data['accountStatus'] as String?) ?? 'active')
+        .trim()
+        .toLowerCase();
+    if (accountStatus != 'banned') {
+      return;
+    }
+
+    final rawBanUntil = data['banUntil'];
+    final banUntil = rawBanUntil is Timestamp ? rawBanUntil.toDate() : null;
+    final now = DateTime.now();
+
+    if (banUntil != null && !banUntil.isAfter(now)) {
+      try {
+        await _clearExpiredBan(staffDoc.ref);
+      } on FirebaseException catch (e) {
+        if (!_isPermissionDenied(e)) rethrow;
+      }
+      return;
+    }
+
+    await _auth.signOut();
+
+    final message = banUntil == null
+        ? 'Temporarily banned.'
+        : 'Temporarily banned until ${DateFormat('dd MMM yyyy, hh:mm a').format(banUntil.toLocal())}.';
+    throw FirebaseAuthException(code: 'user-banned', message: message);
+  }
+
+  Future<void> _clearExpiredBan(DocumentReference<Map<String, dynamic>> ref) {
+    return ref.set({
+      'accountStatus': 'active',
+      'banUntil': FieldValue.delete(),
+      'banReason': FieldValue.delete(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  }
+
+  Future<_SalesmanDocHit?> _findSalesmanDoc(User user) async {
+    final staff = _firestore.collection(_salesmenCollection);
+    final byDocId = await staff.doc(user.uid).get();
+    if (byDocId.exists) {
+      return _SalesmanDocHit(byDocId.reference, byDocId.data() ?? const {});
+    }
+
+    final byUid = await staff.where('uid', isEqualTo: user.uid).limit(1).get();
+    if (byUid.docs.isNotEmpty) {
+      final doc = byUid.docs.first;
+      return _SalesmanDocHit(doc.reference, doc.data());
+    }
+
+    final email = (user.email ?? '').trim();
+    if (email.isNotEmpty) {
+      final byEmail = await staff.where('email', isEqualTo: email).limit(1).get();
+      if (byEmail.docs.isNotEmpty) {
+        final doc = byEmail.docs.first;
+        return _SalesmanDocHit(doc.reference, doc.data());
+      }
+    }
+
+    return null;
+  }
+
+  bool _isPermissionDenied(FirebaseException error) {
+    return error.code == 'permission-denied' ||
+        error.message?.toLowerCase().contains('permission') == true;
   }
 
   Future<String> _generateNextStaffCode() async {
@@ -134,4 +228,11 @@ class AuthRemoteDataSource {
     final next = maxNumber + 1;
     return 'SM-${next.toString().padLeft(3, '0')}';
   }
+}
+
+class _SalesmanDocHit {
+  const _SalesmanDocHit(this.ref, this.data);
+
+  final DocumentReference<Map<String, dynamic>> ref;
+  final Map<String, dynamic> data;
 }

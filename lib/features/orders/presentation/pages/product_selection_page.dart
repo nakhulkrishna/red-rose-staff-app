@@ -1,15 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:staff_app/features/orders/domain/entities/market_type.dart';
+import 'package:staff_app/features/auth/presentation/providers/salesman_market_provider.dart';
 import 'package:staff_app/features/orders/domain/entities/product_unit.dart';
 import 'package:staff_app/features/orders/presentation/providers/order_controller.dart';
 import 'package:staff_app/features/products/domain/entities/product.dart';
 import 'package:staff_app/features/products/presentation/providers/product_list_provider.dart';
+import 'package:staff_app/shared/widgets/price_mode_banner.dart';
 
 class ProductSelectionPage extends ConsumerStatefulWidget {
-  const ProductSelectionPage({super.key, required this.marketType});
-
-  final MarketType marketType;
+  const ProductSelectionPage({super.key});
 
   @override
   ConsumerState<ProductSelectionPage> createState() =>
@@ -22,10 +21,17 @@ class _ProductSelectionPageState extends ConsumerState<ProductSelectionPage> {
   @override
   Widget build(BuildContext context) {
     final productsAsync = ref.watch(productsProvider);
+    final priceModeLabel =
+        ref.watch(salesmanMarketContextProvider).valueOrNull?.priceModeLabel ??
+        'Local Market';
     return Scaffold(
       appBar: AppBar(title: const Text('Add Products')),
       body: Column(
         children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+            child: PriceModeBanner(label: priceModeLabel),
+          ),
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
             child: TextField(
@@ -63,6 +69,21 @@ class _ProductSelectionPageState extends ConsumerState<ProductSelectionPage> {
                                   fit: BoxFit.cover,
                                   width: 40,
                                   height: 40,
+                                  cacheWidth:
+                                      (40 *
+                                              MediaQuery.of(
+                                                context,
+                                              ).devicePixelRatio)
+                                          .round()
+                                          .clamp(1, 512),
+                                  cacheHeight:
+                                      (40 *
+                                              MediaQuery.of(
+                                                context,
+                                              ).devicePixelRatio)
+                                          .round()
+                                          .clamp(1, 512),
+                                  filterQuality: FilterQuality.low,
                                 ),
                               ),
                       ),
@@ -162,7 +183,7 @@ class _ProductSelectionPageState extends ConsumerState<ProductSelectionPage> {
           product: product,
           unit: selectedUnit,
           quantity: qty,
-          market: widget.marketType,
+          market: ref.read(salesmanMarketTypeProvider),
         );
     ScaffoldMessenger.of(
       context,

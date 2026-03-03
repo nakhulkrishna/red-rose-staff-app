@@ -6,7 +6,7 @@ class GetProductsUseCase {
 
   const GetProductsUseCase(this._repository);
 
-  Future<List<Product>> call() {
-    return _repository.getProducts();
+  Future<List<Product>> call({required String salesMarketKey}) {
+    return _repository.getProducts(salesMarketKey: salesMarketKey);
   }
 }

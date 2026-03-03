@@ -11,7 +11,13 @@ final customersStreamProvider = StreamProvider<List<Customer>>((ref) {
     snapshot,
   ) {
     final customers = snapshot.docs
-        .where((doc) => (doc.data()['status'] as String? ?? '') == 'active')
+        .where((doc) {
+          final status = ((doc.data()['status'] as String?) ?? '')
+              .trim()
+              .toLowerCase();
+          // Treat missing status as active to avoid hiding valid legacy records.
+          return status.isEmpty || status == 'active';
+        })
         .map((doc) => _toCustomer(doc))
         .toList();
     customers.sort((a, b) {

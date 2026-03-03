@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:staff_app/features/auth/presentation/providers/salesman_market_provider.dart';
 import 'package:staff_app/features/auth/presentation/providers/auth_controller.dart';
 import 'package:staff_app/features/customers/domain/entities/customer.dart';
 import 'package:staff_app/features/customers/presentation/providers/customers_provider.dart';
@@ -11,6 +12,7 @@ import 'package:staff_app/features/orders/domain/entities/sales_order.dart';
 import 'package:staff_app/features/products/data/models/product_model.dart';
 import 'package:staff_app/features/products/domain/entities/product.dart';
 import 'package:staff_app/features/products/presentation/providers/product_list_provider.dart';
+import 'package:staff_app/core/logging/app_logger.dart';
 import 'package:staff_app/shared/providers/firebase_providers.dart';
 
 final cartProvider = StateNotifierProvider<CartNotifier, List<CartItem>>((ref) {
@@ -47,7 +49,10 @@ class CartNotifier extends StateNotifier<List<CartItem>> {
       return 'Insufficient stock. Available base stock: ${product.availableStock.toStringAsFixed(2)} ${product.baseUnit}.';
     }
 
-    final pricing = _resolvePricing(product, unit);
+    final pricing = _resolvePricing(product, unit, market);
+    if (pricing == null) {
+      return 'Price not configured for your market.';
+    }
 
     if (existingIndex >= 0) {
       final updated = state[existingIndex].copyWith(
@@ -56,6 +61,7 @@ class CartNotifier extends StateNotifier<List<CartItem>> {
         regularPriceQar: pricing.regularUnitPrice,
         offerPriceQar: pricing.offerUnitPrice,
         appliedPriceQar: pricing.appliedUnitPrice,
+        appliedMarketKey: pricing.appliedMarketKey,
       );
       state = [
         for (var i = 0; i < state.length; i++)
@@ -78,6 +84,7 @@ class CartNotifier extends StateNotifier<List<CartItem>> {
       regularPriceQar: pricing.regularUnitPrice,
       offerPriceQar: pricing.offerUnitPrice,
       appliedPriceQar: pricing.appliedUnitPrice,
+      appliedMarketKey: pricing.appliedMarketKey,
     );
     state = [...state, line];
     return null;
@@ -102,7 +109,10 @@ class CartNotifier extends StateNotifier<List<CartItem>> {
       return 'Insufficient stock for this update.';
     }
 
-    final pricing = _resolvePricing(product, unit);
+    final pricing = _resolvePricing(product, unit, market);
+    if (pricing == null) {
+      return 'Price not configured for your market.';
+    }
 
     final updated = current.copyWith(
       productCode: product.code,
@@ -114,6 +124,7 @@ class CartNotifier extends StateNotifier<List<CartItem>> {
       regularPriceQar: pricing.regularUnitPrice,
       offerPriceQar: pricing.offerUnitPrice,
       appliedPriceQar: pricing.appliedUnitPrice,
+      appliedMarketKey: pricing.appliedMarketKey,
     );
 
     state = [
@@ -142,16 +153,38 @@ class CartNotifier extends StateNotifier<List<CartItem>> {
     return null;
   }
 
-  _LinePricing _resolvePricing(Product product, ProductUnit unit) {
-    final regularBase = product.priceQar > 0
-        ? product.priceQar
-        : (product.marketPrices[MarketType.hyper] ?? 0);
+  _LinePricing? _resolvePricing(
+    Product product,
+    ProductUnit unit,
+    MarketType market,
+  ) {
+    final unitKey = _normalizeUnitKey(unit.code);
+    final regularUnitFromMarket = product.marketUnitPrices[market]?[unitKey];
+    final offerUnitFromMarket = product.marketUnitOfferPrices[market]?[unitKey];
+    if (regularUnitFromMarket != null && regularUnitFromMarket > 0) {
+      final appliedUnit =
+          (offerUnitFromMarket != null && offerUnitFromMarket > 0)
+          ? offerUnitFromMarket
+          : regularUnitFromMarket;
+      return _LinePricing(
+        regularUnitPrice: regularUnitFromMarket,
+        offerUnitPrice: offerUnitFromMarket ?? 0,
+        appliedUnitPrice: appliedUnit,
+        appliedMarketKey: market.firestoreKey,
+      );
+    }
+
+    final regularBase = product.marketPrices[market] ?? 0;
+    if (regularBase <= 0) {
+      return null;
+    }
     final offerBase = product.offerPriceQar;
     final appliedBase = offerBase > 0 ? offerBase : regularBase;
     return _LinePricing(
       regularUnitPrice: regularBase * unit.multiplierToBase,
       offerUnitPrice: offerBase > 0 ? offerBase * unit.multiplierToBase : 0,
       appliedUnitPrice: appliedBase * unit.multiplierToBase,
+      appliedMarketKey: market.firestoreKey,
     );
   }
 
@@ -177,12 +210,16 @@ class _LinePricing {
     required this.regularUnitPrice,
     required this.offerUnitPrice,
     required this.appliedUnitPrice,
+    required this.appliedMarketKey,
   });
 
   final double regularUnitPrice;
   final double offerUnitPrice;
   final double appliedUnitPrice;
+  final String appliedMarketKey;
 }
+
+String _normalizeUnitKey(String unit) => unit.trim().toLowerCase();
 
 final orderHistoryProvider = StreamProvider<List<SalesOrder>>((ref) {
   final authUser = ref.watch(authStateProvider).valueOrNull;
@@ -206,10 +243,11 @@ final orderHistoryProvider = StreamProvider<List<SalesOrder>>((ref) {
         .where('salesmanId', whereIn: ids.take(10).toList())
         .snapshots()
         .map((snapshot) {
-          final orders = snapshot.docs
-              .map((doc) => _salesOrderFromDoc(doc.id, doc.data()))
-              .toList()
-            ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+          final orders =
+              snapshot.docs
+                  .map((doc) => _salesOrderFromDoc(doc.id, doc.data()))
+                  .toList()
+                ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
           return orders;
         });
   });
@@ -311,6 +349,18 @@ class OrderSubmissionController
 
     try {
       final firestore = _ref.read(firestoreProvider);
+      final marketContext = await _ref.read(
+        salesmanMarketContextProvider.future,
+      );
+      for (final line in cart) {
+        if (line.appliedMarketKey != marketContext.salesMarketKey) {
+          final result = OrderSubmitResult.failure(
+            'Cart market changed. Please clear cart and add items again.',
+          );
+          state = AsyncData(result);
+          return result;
+        }
+      }
       final latestProducts = <String, Product>{};
       for (final line in cart) {
         if (latestProducts.containsKey(line.productId)) continue;
@@ -333,7 +383,19 @@ class OrderSubmissionController
           state = AsyncData(result);
           return result;
         }
-        latestProducts[line.productId] = ProductModel.fromMap(doc.id, map);
+        final resolvedProduct = ProductModel.fromMap(
+          doc.id,
+          map,
+          salesMarketKey: marketContext.salesMarketKey,
+        );
+        if (!resolvedProduct.hasMarketPriceConfigured) {
+          final result = OrderSubmitResult.failure(
+            'Price not configured for ${line.productName} in your market.',
+          );
+          state = AsyncData(result);
+          return result;
+        }
+        latestProducts[line.productId] = resolvedProduct;
       }
 
       final groupedBase = <String, double>{};
@@ -376,6 +438,7 @@ class OrderSubmissionController
           'unitPriceQar': line.regularPriceQar,
           'offerPriceQar': line.offerPriceQar > 0 ? line.offerPriceQar : null,
           'appliedPriceQar': line.appliedPriceQar,
+          'appliedMarketKey': line.appliedMarketKey,
           'lineTotalQar': line.total,
         };
       }).toList();
@@ -389,6 +452,7 @@ class OrderSubmissionController
             ? authUser!.name
             : 'Salesman',
         'channel': 'Salesman App',
+        'salesMarketKey': marketContext.salesMarketKey,
         'orderDate': FieldValue.serverTimestamp(),
         'itemsCount': cart.length,
         'amountQar': amountQar,
@@ -411,6 +475,11 @@ class OrderSubmissionController
       state = AsyncData(result);
       return result;
     } catch (e, st) {
+      AppLogger.error(
+        source: 'OrderController.submitOrder',
+        error: e,
+        stackTrace: st,
+      );
       final result = OrderSubmitResult.failure(e.toString());
       state = AsyncError(e, st);
       state = AsyncData(result);
@@ -507,6 +576,10 @@ SalesOrder _salesOrderFromDoc(String fallbackId, Map<String, dynamic> data) {
           (itemMap['unitPriceQar'] as num?)?.toDouble() ?? resolvedUnit,
       offerPriceQar: (itemMap['offerPriceQar'] as num?)?.toDouble() ?? 0,
       appliedPriceQar: applied ?? resolvedUnit,
+      appliedMarketKey:
+          (itemMap['appliedMarketKey'] as String?) ??
+          (data['salesMarketKey'] as String?) ??
+          'local_market',
     );
   }).toList();
 

@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:staff_app/features/auth/presentation/providers/salesman_market_provider.dart';
 import 'package:staff_app/features/customers/presentation/providers/customers_provider.dart';
 import 'package:staff_app/features/orders/domain/entities/market_type.dart';
 import 'package:staff_app/features/orders/domain/entities/product_unit.dart';
 import 'package:staff_app/features/orders/presentation/providers/order_controller.dart';
 import 'package:staff_app/features/products/domain/entities/product.dart';
 import 'package:staff_app/features/products/presentation/providers/products_catalog_provider.dart';
+import 'package:staff_app/shared/widgets/price_mode_banner.dart';
 
 class ProductDetailPage extends ConsumerStatefulWidget {
   final String productId;
@@ -18,7 +20,6 @@ class ProductDetailPage extends ConsumerStatefulWidget {
 
 class _ProductDetailPageState extends ConsumerState<ProductDetailPage> {
   late TextEditingController _qtyController;
-  MarketType? _market;
   ProductUnit? _unit;
 
   @override
@@ -40,12 +41,12 @@ class _ProductDetailPageState extends ConsumerState<ProductDetailPage> {
       return const Scaffold(body: Center(child: Text('Product not found')));
     }
 
-    final selectedCustomer = ref.watch(selectedCustomerProvider);
-    _market ??= selectedCustomer?.marketType ?? MarketType.hyper;
+    final marketContext = ref.watch(salesmanMarketContextProvider).valueOrNull;
+    final market = marketContext?.marketType ?? MarketType.local;
     _unit ??= product.units.first;
 
     final quantity = double.tryParse(_qtyController.text) ?? 0;
-    final unitPrice = _resolveUnitPrice(product, _market!, _unit!);
+    final unitPrice = _resolveUnitPrice(product, market, _unit!);
     final total = unitPrice * quantity;
     final stock = ref.watch(stockProvider)[product.id] ?? 0;
 
@@ -58,31 +59,35 @@ class _ProductDetailPageState extends ConsumerState<ProductDetailPage> {
           const SizedBox(height: 12),
           Text(product.name, style: Theme.of(context).textTheme.titleLarge),
           Text(product.description),
-          Text('Available Stock: ${stock.toStringAsFixed(2)} ${product.baseUnit}'),
+          Text(
+            'Available Stock: ${stock.toStringAsFixed(2)} ${product.baseUnit}',
+          ),
           const SizedBox(height: 16),
-          DropdownButtonFormField<MarketType>(
-            initialValue: _market,
-            decoration: const InputDecoration(labelText: 'Market', border: OutlineInputBorder()),
-            items: MarketType.values
-                .map((value) => DropdownMenuItem(value: value, child: Text(value.label)))
-                .toList(),
-            onChanged: (value) {
-              if (value != null) setState(() => _market = value);
-            },
+          PriceModeBanner(
+            label: marketContext?.priceModeLabel ?? 'Local Market',
           ),
           const SizedBox(height: 12),
           DropdownButtonFormField<ProductUnit>(
             initialValue: _unit,
-            decoration: const InputDecoration(labelText: 'Unit', border: OutlineInputBorder()),
+            decoration: const InputDecoration(
+              labelText: 'Unit',
+              border: OutlineInputBorder(),
+            ),
             items: product.units
-                .map((value) => DropdownMenuItem(value: value, child: Text(value.code)))
+                .map(
+                  (value) =>
+                      DropdownMenuItem(value: value, child: Text(value.code)),
+                )
                 .toList(),
             onChanged: (value) {
               if (value != null) {
                 setState(() {
                   _unit = value;
                   if (!value.allowDecimal) {
-                    _qtyController.text = (double.tryParse(_qtyController.text) ?? 1).toInt().toString();
+                    _qtyController.text =
+                        (double.tryParse(_qtyController.text) ?? 1)
+                            .toInt()
+                            .toString();
                   }
                 });
               }
@@ -94,7 +99,9 @@ class _ProductDetailPageState extends ConsumerState<ProductDetailPage> {
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             decoration: InputDecoration(
               labelText: 'Quantity',
-              helperText: _unit!.allowDecimal ? 'Decimals allowed' : 'Integers only',
+              helperText: _unit!.allowDecimal
+                  ? 'Decimals allowed'
+                  : 'Integers only',
               border: const OutlineInputBorder(),
             ),
             onChanged: (_) => setState(() {}),
@@ -123,7 +130,16 @@ class _ProductDetailPageState extends ConsumerState<ProductDetailPage> {
     );
   }
 
-  double _resolveUnitPrice(Product product, MarketType market, ProductUnit unit) {
+  double _resolveUnitPrice(
+    Product product,
+    MarketType market,
+    ProductUnit unit,
+  ) {
+    final unitKey = unit.code.trim().toLowerCase();
+    final marketUnitPrice = product.marketUnitPrices[market]?[unitKey];
+    if (marketUnitPrice != null && marketUnitPrice > 0) {
+      return marketUnitPrice;
+    }
     final basePrice = product.marketPrices[market] ?? 0;
     return basePrice * unit.multiplierToBase;
   }
@@ -132,29 +148,33 @@ class _ProductDetailPageState extends ConsumerState<ProductDetailPage> {
     final customer = ref.read(selectedCustomerProvider);
     if (customer == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Select customer first from Customers screen.')),
+        const SnackBar(
+          content: Text('Select customer first from Customers screen.'),
+        ),
       );
       return;
     }
 
     final quantity = double.tryParse(_qtyController.text);
     if (quantity == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Enter a valid quantity.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Enter a valid quantity.')));
       return;
     }
 
-    final error = ref.read(cartProvider.notifier).addItem(
+    final error = ref
+        .read(cartProvider.notifier)
+        .addItem(
           product: product,
           unit: _unit!,
           quantity: quantity,
-          market: _market!,
+          market: ref.read(salesmanMarketTypeProvider),
         );
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(error ?? 'Product added to cart.')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(error ?? 'Product added to cart.')));
 
     if (error == null) {
       Navigator.of(context).pop();

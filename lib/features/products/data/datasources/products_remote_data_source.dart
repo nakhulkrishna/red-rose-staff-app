@@ -6,7 +6,9 @@ class ProductsRemoteDataSource {
 
   const ProductsRemoteDataSource(this._firestore);
 
-  Future<List<ProductModel>> getProducts() async {
+  Future<List<ProductModel>> getProducts({
+    required String salesMarketKey,
+  }) async {
     QuerySnapshot<Map<String, dynamic>> snapshot;
     try {
       snapshot = await _firestore
@@ -23,7 +25,14 @@ class ProductsRemoteDataSource {
     }
 
     final products = snapshot.docs
-        .map((doc) => ProductModel.fromMap(doc.id, doc.data()))
+        .map(
+          (doc) => ProductModel.fromMap(
+            doc.id,
+            doc.data(),
+            salesMarketKey: salesMarketKey,
+          ),
+        )
+        .where((product) => product.hasMarketPriceConfigured)
         .toList();
     products.sort(
       (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),

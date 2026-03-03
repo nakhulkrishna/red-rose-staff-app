@@ -84,6 +84,10 @@ final authErrorMessageProvider = Provider<String?>((ref) {
 });
 
 String _friendlyError(Object error) {
+  if (error is FirebaseException && error.code == 'permission-denied') {
+    return 'Firestore permission denied. Please check security rules for this user.';
+  }
+
   if (error is FirebaseAuthException) {
     switch (error.code) {
       case 'invalid-email':
@@ -96,6 +100,8 @@ String _friendlyError(Object error) {
         return 'This email is already registered.';
       case 'weak-password':
         return 'Password is too weak.';
+      case 'user-banned':
+        return error.message ?? 'Temporarily banned.';
       default:
         return error.message ?? 'Authentication failed.';
     }

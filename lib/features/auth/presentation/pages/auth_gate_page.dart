@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:staff_app/features/auth/presentation/pages/login_page.dart';
@@ -20,7 +21,9 @@ class AuthGatePage extends ConsumerWidget {
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Text(
-              'Authentication failed: $error',
+              error is FirebaseAuthException && error.code == 'user-banned'
+                  ? (error.message ?? 'Temporarily banned.')
+                  : 'Authentication failed: $error',
               textAlign: TextAlign.center,
             ),
           ),

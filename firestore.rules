@@ -1,0 +1,252 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function userPath(uid) {
+      return /databases/$(database)/documents/catalog_users/$(uid);
+    }
+
+    function staffUserPath(uid) {
+      return /databases/$(database)/documents/catalog_staff_salesmen/$(uid);
+    }
+
+    function currentUser() {
+      return !signedIn()
+        ? null
+        : (
+          exists(userPath(request.auth.uid))
+            ? get(userPath(request.auth.uid)).data
+            : (
+              exists(staffUserPath(request.auth.uid))
+                ? get(staffUserPath(request.auth.uid)).data
+                : null
+            )
+        );
+    }
+
+    function isSelf(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    function profileIsActive(user) {
+      return !('isActive' in user) ||
+        user.isActive == true ||
+        ((user.isActive is string) && user.isActive.lower() == 'true');
+    }
+
+    function profileIsApproved(user) {
+      return !('approvalStatus' in user) ||
+        (
+          (user.approvalStatus is string) &&
+          user.approvalStatus.lower() == 'approved'
+        );
+    }
+
+    function profileIsNotBanned(user) {
+      return !('accountStatus' in user) ||
+        !(
+          (user.accountStatus is string) &&
+          user.accountStatus.lower() == 'banned'
+        );
+    }
+
+    function isAdminRole(user) {
+      return (user.role is string) &&
+        user.role.lower().matches('.*(admin|manager).*');
+    }
+
+    function isDeveloperRole(user) {
+      return (user.role is string) &&
+        user.role.lower().matches('.*(developer|dev).*');
+    }
+
+    function isStaffRole(user) {
+      return (user.role is string) &&
+        user.role.lower().matches('.*(staff|salesman|sales).*');
+    }
+
+    function roleDefaultPermission(user, permissionKey) {
+      return isAdminRole(user) ||
+        (isDeveloperRole(user) &&
+          (permissionKey == 'dashboard'
+            || permissionKey == 'products'
+            || permissionKey == 'orders'
+            || permissionKey == 'customers'
+            || permissionKey == 'coreTeam'
+            || permissionKey == 'settings')) ||
+        (isStaffRole(user) &&
+          (permissionKey == 'orders'
+            || permissionKey == 'customers'
+            || permissionKey == 'settings'));
+    }
+
+    function hasExplicitPermission(user, permissionKey) {
+      return ('permissions' in user) &&
+        (user.permissions[permissionKey] == true);
+    }
+
+    function isApprovedActive(user) {
+      return profileIsActive(user) &&
+        profileIsApproved(user) &&
+        profileIsNotBanned(user);
+    }
+
+    function isAdmin() {
+      let user = currentUser();
+      return user != null &&
+        isAdminRole(user) &&
+        profileIsActive(user);
+    }
+
+    function isDeveloper() {
+      let user = currentUser();
+      return user != null &&
+        isDeveloperRole(user) &&
+        profileIsActive(user);
+    }
+
+    function hasPermission(permissionKey) {
+      let user = currentUser();
+      return user != null &&
+        isApprovedActive(user) &&
+        (isAdminRole(user)
+          || hasExplicitPermission(user, permissionKey)
+          || roleDefaultPermission(user, permissionKey));
+    }
+
+    function isApprovedActiveStaff() {
+      let user = currentUser();
+      return user != null &&
+        isStaffRole(user) &&
+        isApprovedActive(user);
+    }
+
+    function canReadUserLookupForStaffApp() {
+      return isApprovedActiveStaff() &&
+        (hasPermission('orders')
+          || hasPermission('customers')
+          || hasPermission('settings'));
+    }
+
+    function canReadProducts() {
+      return hasPermission('products') || hasPermission('orders');
+    }
+
+    function canReadCustomers() {
+      return hasPermission('customers') || hasPermission('orders');
+    }
+
+    function canReadStaffDirectory() {
+      return hasPermission('staffs') ||
+        hasPermission('dashboard') ||
+        hasPermission('orders');
+    }
+
+    function canReadOwnStaffProfile(docId) {
+      return signedIn() &&
+        (
+          docId == request.auth.uid ||
+          (resource.data.uid is string &&
+            resource.data.uid == request.auth.uid) ||
+          (
+            request.auth.token.email is string &&
+            resource.data.email is string &&
+            resource.data.email.lower() == request.auth.token.email.lower()
+          )
+        );
+    }
+
+    function canGetStaffProfile(docId) {
+      return canReadOwnStaffProfile(docId) ||
+        hasPermission('staffs') ||
+        hasPermission('dashboard');
+    }
+
+    function canCreateOwnStaffProfile(docId) {
+      return signedIn() &&
+        (
+          docId == request.auth.uid ||
+          (
+            request.resource.data.uid is string &&
+            request.resource.data.uid == request.auth.uid
+          ) ||
+          (
+            request.auth.token.email is string &&
+            request.resource.data.email is string &&
+            request.resource.data.email.lower() == request.auth.token.email.lower()
+          )
+        );
+    }
+
+    function selfProfileCanUpdate(uid) {
+      return isSelf(uid)
+        && request.resource.data.role == resource.data.role
+        && request.resource.data.requestedRole == resource.data.requestedRole
+        && request.resource.data.permissions == resource.data.permissions
+        && (
+          request.resource.data.isActive == resource.data.isActive
+          || (resource.data.isActive == true
+            && request.resource.data.isActive == false)
+        )
+        && (
+          request.resource.data.approvalStatus == resource.data.approvalStatus
+          || (request.resource.data.isActive == false
+            && request.resource.data.approvalStatus == 'deactivated')
+        );
+    }
+
+    match /catalog_users/{uid} {
+      allow read: if isSelf(uid)
+        || isAdmin()
+        || isDeveloper()
+        || hasPermission('coreTeam')
+        || canReadUserLookupForStaffApp();
+
+      allow create: if isSelf(uid)
+        && request.resource.data.uid == request.auth.uid
+        && (request.resource.data.role == 'Staff'
+          || request.resource.data.role == 'Salesman')
+        && request.resource.data.requestedRole is string
+        && request.resource.data.approvalStatus == 'pending'
+        && request.resource.data.isActive == false;
+
+      allow update: if isAdmin() || selfProfileCanUpdate(uid);
+
+      allow delete: if isAdmin();
+    }
+
+    match /catalog_products/{docId} {
+      allow read: if canReadProducts();
+      allow write: if hasPermission('products');
+    }
+
+    match /catalog_product_categories/{docId} {
+      allow read: if canReadProducts();
+      allow write: if hasPermission('products');
+    }
+
+    match /catalog_orders/{docId} {
+      allow read, write: if hasPermission('orders');
+    }
+
+    match /catalog_customers/{docId} {
+      allow read: if canReadCustomers();
+      allow write: if hasPermission('customers');
+    }
+
+    // Needed by staff app order-ID generation flow.
+    match /_catalog_order_counters/{docId} {
+      allow read, write: if hasPermission('orders');
+    }
+
+    match /catalog_staff_salesmen/{docId} {
+      allow get: if canGetStaffProfile(docId);
+      allow list: if canReadStaffDirectory() || canReadUserLookupForStaffApp();
+      allow create: if hasPermission('staffs') || canCreateOwnStaffProfile(docId);
+      allow update, delete: if hasPermission('staffs');
+    }
+  }
+}
