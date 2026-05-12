@@ -213,20 +213,18 @@ class AuthRemoteDataSource {
   }
 
   Future<String> _generateNextStaffCode() async {
-    final snapshot = await _firestore.collection(_salesmenCollection).get();
-    var maxNumber = 0;
-
-    for (final doc in snapshot.docs) {
-      final id = doc.id;
-      final match = RegExp(r'^SM-(\d+)$').firstMatch(id);
-      if (match == null) continue;
-      final value = int.tryParse(match.group(1) ?? '');
-      if (value == null) continue;
-      if (value > maxNumber) maxNumber = value;
-    }
-
-    final next = maxNumber + 1;
-    return 'SM-${next.toString().padLeft(3, '0')}';
+    final counterRef = _firestore.collection('_catalog_staff_counters').doc('sm_counter');
+    final seq = await _firestore.runTransaction<int>((tx) async {
+      final snap = await tx.get(counterRef);
+      final current = (snap.data()?['lastSeq'] as num?)?.toInt() ?? 0;
+      final next = current + 1;
+      tx.set(counterRef, {
+        'lastSeq': next,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+      return next;
+    });
+    return 'SM-${seq.toString().padLeft(3, '0')}';
   }
 }
 
