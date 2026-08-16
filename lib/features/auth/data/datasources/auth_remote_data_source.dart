@@ -7,6 +7,7 @@ class AuthRemoteDataSource {
   final FirebaseAuth _auth;
   final FirebaseFirestore _firestore;
   static const _salesmenCollection = 'catalog_staff_salesmen';
+  static const _usersCollection = 'catalog_users';
 
   const AuthRemoteDataSource(this._auth, this._firestore);
 
@@ -64,43 +65,57 @@ class AuthRemoteDataSource {
     }
 
     await user.updateDisplayName(name);
-    final staffCode = await _generateNextStaffCode();
     final cleanedName = name.trim();
     final cleanedEmail = email.trim();
     final now = FieldValue.serverTimestamp();
-    final staffPayload = <String, dynamic>{
-      'id': staffCode,
+
+    // Self-registration contract enforced by firestore.rules on catalog_users:
+    // own uid as doc id, role Staff/Salesman, approvalStatus 'pending',
+    // isActive false. An admin approves the account from the admin panel.
+    await _firestore.collection(_usersCollection).doc(user.uid).set({
+      'uid': user.uid,
+      'fullName': cleanedName,
+      'email': cleanedEmail,
+      'phone': phone,
+      'region': region,
+      'role': 'Salesman',
+      'requestedRole': 'Salesman',
+      'approvalStatus': 'pending',
+      'isActive': false,
+      'permissions': <String, dynamic>{},
+      'createdAt': now,
+      'updatedAt': now,
+    });
+
+    // Also create a self-owned salesman profile (allowed by rules for
+    // docId == own uid) so the admin panel's Staffs tab lists the new
+    // salesman immediately. It starts inactive; the admin's activate toggle
+    // also approves the linked catalog_users account by email.
+    await _firestore.collection(_salesmenCollection).doc(user.uid).set({
+      'id': user.uid,
       'uid': user.uid,
       'name': cleanedName,
       'nameLower': cleanedName.toLowerCase(),
+      'role': 'Salesman',
       'region': region,
       'phone': phone,
       'email': cleanedEmail,
-      'role': 'Salesman',
-      'status': 'active',
-      'isActive': true,
-      'approvalStatus': 'approved',
-      'accountStatus': 'active',
-      'banUntil': null,
-      'banReason': null,
+      'emailLower': cleanedEmail.toLowerCase(),
       'imageUrl': null,
-      'achievedSalesQar': 0,
-      'monthlyTargetQar': 0,
       'dealsClosed': 0,
+      'monthlyTargetQar': 0,
+      'achievedSalesQar': 0,
+      'status': 'inactive',
+      'salesMarketAccess': 'both',
       'createdAt': now,
       'updatedAt': now,
-    };
-
-    await _firestore
-        .collection(_salesmenCollection)
-        .doc(staffCode)
-        .set(staffPayload, SetOptions(merge: true));
-    await _firestore
-        .collection(_salesmenCollection)
-        .doc(user.uid)
-        .set(staffPayload, SetOptions(merge: true));
+    });
 
     return _buildUser(user);
+  }
+
+  Future<void> sendPasswordResetEmail({required String email}) {
+    return _auth.sendPasswordResetEmail(email: email.trim());
   }
 
   Future<void> signOut() {
@@ -111,17 +126,38 @@ class AuthRemoteDataSource {
     await _enforceBanPolicy(user);
 
     final email = user.email ?? '';
-    Map<String, dynamic> data = const <String, dynamic>{};
+    Map<String, dynamic> userData = const <String, dynamic>{};
     try {
-      final staffDoc = await _findSalesmanDoc(user);
-      data = staffDoc?.data ?? const <String, dynamic>{};
+      final userDoc = await _firestore
+          .collection(_usersCollection)
+          .doc(user.uid)
+          .get();
+      userData = userDoc.data() ?? const <String, dynamic>{};
     } on FirebaseException catch (e) {
       if (!_isPermissionDenied(e)) rethrow;
     }
 
-    final name = (data['name'] as String?) ?? (user.displayName ?? '');
-    final region = (data['region'] as String?) ?? '';
-    final phone = (data['phone'] as String?) ?? '';
+    Map<String, dynamic> staffData = const <String, dynamic>{};
+    try {
+      final staffDoc = await _findSalesmanDoc(user);
+      staffData = staffDoc?.data ?? const <String, dynamic>{};
+    } on FirebaseException catch (e) {
+      if (!_isPermissionDenied(e)) rethrow;
+    }
+
+    final name =
+        (userData['fullName'] as String?) ??
+        (staffData['name'] as String?) ??
+        (user.displayName ?? '');
+    final region =
+        (userData['region'] as String?) ?? (staffData['region'] as String?) ?? '';
+    final phone =
+        (userData['phone'] as String?) ?? (staffData['phone'] as String?) ?? '';
+
+    // Approval state lives on catalog_users (managed by the admin panel).
+    // Missing fields are treated as approved/active so pre-existing salesmen
+    // without a catalog_users doc keep working, matching the rules' leniency.
+    final statusSource = userData.isNotEmpty ? userData : staffData;
 
     return AppUserModel(
       uid: user.uid,
@@ -129,7 +165,22 @@ class AuthRemoteDataSource {
       name: name,
       region: region,
       phone: phone,
+      approvalStatus: _readApprovalStatus(statusSource),
+      isActive: _readIsActive(statusSource),
     );
+  }
+
+  String _readApprovalStatus(Map<String, dynamic> data) {
+    final raw = data['approvalStatus'];
+    if (raw is String && raw.trim().isNotEmpty) return raw.trim();
+    return 'approved';
+  }
+
+  bool _readIsActive(Map<String, dynamic> data) {
+    final raw = data['isActive'];
+    if (raw is bool) return raw;
+    if (raw is String) return raw.toLowerCase() != 'false';
+    return true;
   }
 
   Future<void> _enforceBanPolicy(User user) async {
@@ -210,21 +261,6 @@ class AuthRemoteDataSource {
   bool _isPermissionDenied(FirebaseException error) {
     return error.code == 'permission-denied' ||
         error.message?.toLowerCase().contains('permission') == true;
-  }
-
-  Future<String> _generateNextStaffCode() async {
-    final counterRef = _firestore.collection('_catalog_staff_counters').doc('sm_counter');
-    final seq = await _firestore.runTransaction<int>((tx) async {
-      final snap = await tx.get(counterRef);
-      final current = (snap.data()?['lastSeq'] as num?)?.toInt() ?? 0;
-      final next = current + 1;
-      tx.set(counterRef, {
-        'lastSeq': next,
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-      return next;
-    });
-    return 'SM-${seq.toString().padLeft(3, '0')}';
   }
 }
 

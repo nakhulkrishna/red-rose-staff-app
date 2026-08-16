@@ -7,5 +7,7 @@ class AppUserModel extends AppUser {
     required super.name,
     required super.region,
     required super.phone,
+    super.approvalStatus,
+    super.isActive,
   });
 }
