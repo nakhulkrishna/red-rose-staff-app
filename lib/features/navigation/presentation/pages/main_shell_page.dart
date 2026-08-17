@@ -2,10 +2,9 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:staff_app/features/customers/presentation/pages/customers_list_page.dart';
-import 'package:staff_app/features/dashboard/presentation/pages/analytics_page.dart';
-import 'package:staff_app/features/home/presentation/pages/home_page.dart';
 import 'package:staff_app/features/navigation/presentation/providers/bottom_nav_provider.dart';
 import 'package:staff_app/features/orders/presentation/pages/orders_overview_page.dart';
+import 'package:staff_app/features/products/presentation/pages/products_list_page.dart';
 import 'package:staff_app/features/settings/presentation/pages/settings_page.dart';
 
 class MainShellPage extends ConsumerWidget {
@@ -16,9 +15,8 @@ class MainShellPage extends ConsumerWidget {
     final index = ref.watch(bottomNavIndexProvider);
 
     final pages = const [
-      HomePage(),
+      ProductsListPage(),
       OrdersOverviewPage(),
-      AnalyticsPage(),
       CustomersListPage(),
       SettingsPage(),
     ];
@@ -45,19 +43,14 @@ class MainShellPage extends ConsumerWidget {
           },
           items: const [
             BottomNavigationBarItem(
-              icon: Icon(CupertinoIcons.home),
-              activeIcon: Icon(CupertinoIcons.house_fill),
-              label: 'Home',
+              icon: Icon(CupertinoIcons.cube_box),
+              activeIcon: Icon(CupertinoIcons.cube_box_fill),
+              label: 'Catalog',
             ),
             BottomNavigationBarItem(
               icon: Icon(CupertinoIcons.doc_text),
               activeIcon: Icon(CupertinoIcons.doc_text_fill),
               label: 'Orders',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(CupertinoIcons.chart_bar),
-              activeIcon: Icon(CupertinoIcons.chart_bar_fill),
-              label: 'Analytics',
             ),
             BottomNavigationBarItem(
               icon: Icon(CupertinoIcons.person_2),
