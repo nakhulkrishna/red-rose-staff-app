@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
+import 'package:staff_app/features/auth/presentation/providers/auth_controller.dart';
 import 'package:staff_app/features/auth/presentation/providers/salesman_market_provider.dart';
 import 'package:staff_app/features/customers/presentation/providers/customers_provider.dart';
 import 'package:staff_app/features/orders/domain/entities/cart_item.dart';
 import 'package:staff_app/features/orders/domain/entities/product_unit.dart';
 import 'package:staff_app/features/orders/presentation/providers/order_controller.dart';
+import 'package:staff_app/shared/providers/whatsapp_order_number_provider.dart';
 import 'package:staff_app/shared/widgets/price_mode_banner.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -227,7 +230,49 @@ class _OrderSummaryPageState extends ConsumerState<OrderSummaryPage> {
     }
   }
 
+  String _buildOrderMessage({
+    required String orderId,
+    required String salesmanName,
+    required String customerName,
+    required List<CartItem> items,
+    required double totalQar,
+  }) {
+    String qty(double value) => value == value.roundToDouble()
+        ? value.toStringAsFixed(0)
+        : value.toStringAsFixed(2);
+
+    final buffer = StringBuffer()
+      ..writeln('*ORDER SUMMARY*')
+      ..writeln('Order ID: $orderId')
+      ..writeln('Salesman: $salesmanName')
+      ..writeln(
+        'Date: ${DateFormat('dd MMM yyyy, hh:mm a').format(DateTime.now())}',
+      )
+      ..writeln('--------------------');
+
+    for (var i = 0; i < items.length; i++) {
+      final item = items[i];
+      buffer
+        ..writeln('${i + 1}. Product: ${item.productName}')
+        ..writeln('   Qty Type: ${item.unitCode}')
+        ..writeln('   Qty: ${qty(item.quantity)}')
+        ..writeln('   Price: QAR ${item.total.toStringAsFixed(2)}');
+    }
+
+    buffer
+      ..writeln('--------------------')
+      ..writeln('Customer Name: $customerName')
+      ..write('Total Price: QAR ${totalQar.toStringAsFixed(2)}');
+
+    return buffer.toString();
+  }
+
   Future<void> _placeOrderAndSendBill() async {
+    // Captured before submitting: submitOrder() clears the cart.
+    final items = List<CartItem>.from(ref.read(cartProvider));
+    final customerName = ref.read(selectedCustomerProvider)?.name ?? '-';
+    final salesmanName = ref.read(authStateProvider).valueOrNull?.name ?? '-';
+
     final result = await ref
         .read(orderSubmissionControllerProvider.notifier)
         .submitOrder();
@@ -239,23 +284,29 @@ class _OrderSummaryPageState extends ConsumerState<OrderSummaryPage> {
       return;
     }
 
-    final phone = (result.customerPhone ?? '').replaceAll(
-      RegExp(r'[^0-9]'),
-      '',
-    );
-    if (phone.isEmpty) {
+    final phone = await ref.read(whatsappOrderNumberProvider.future);
+    if (!mounted) return;
+    if (phone == null || phone.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Order placed: ${result.orderId}. Customer phone missing.',
+            'Order placed: ${result.orderId}. WhatsApp order number is not '
+            'configured in the dashboard.',
           ),
         ),
       );
       Navigator.of(context).pop();
       return;
     }
+
     final msg = Uri.encodeComponent(
-      'Order ${result.orderId} placed successfully.\nTotal: QAR ${(result.amountQar ?? 0).toStringAsFixed(2)}',
+      _buildOrderMessage(
+        orderId: result.orderId ?? '-',
+        salesmanName: salesmanName,
+        customerName: customerName,
+        items: items,
+        totalQar: result.amountQar ?? 0,
+      ),
     );
     final uri = Uri.parse('https://wa.me/$phone?text=$msg');
     final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
