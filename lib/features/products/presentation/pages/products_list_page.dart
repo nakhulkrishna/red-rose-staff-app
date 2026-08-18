@@ -10,7 +10,11 @@ import 'package:staff_app/features/products/presentation/providers/product_list_
 import 'package:staff_app/features/products/presentation/widgets/product_image_carousel.dart';
 
 class ProductsListPage extends ConsumerStatefulWidget {
-  const ProductsListPage({super.key});
+  const ProductsListPage({super.key, this.category});
+
+  /// When set, only products of this category are shown (pushed from the
+  /// categories screen). Null means all products.
+  final String? category;
 
   @override
   ConsumerState<ProductsListPage> createState() => _ProductsListPageState();
@@ -34,11 +38,11 @@ class _ProductsListPageState extends ConsumerState<ProductsListPage> {
     return Scaffold(
       backgroundColor: const Color(0xFFF3F4F6),
       appBar: AppBar(
-        title: const Text('Products'),
+        title: Text(widget.category ?? 'All Products'),
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 8),
-            child: _CartButton(
+            child: CartButton(
               count: cart.length,
               onPressed: () => Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const OrderSummaryPage()),
@@ -117,9 +121,16 @@ class _ProductsListPageState extends ConsumerState<ProductsListPage> {
   }
 
   List<Product> _filter(List<Product> products) {
-    if (_query.isEmpty) return products;
+    var scoped = products;
+    final category = widget.category?.trim().toLowerCase();
+    if (category != null && category.isNotEmpty) {
+      scoped = scoped
+          .where((product) => product.category.trim().toLowerCase() == category)
+          .toList();
+    }
+    if (_query.isEmpty) return scoped;
     final query = _query.toLowerCase();
-    return products.where((product) {
+    return scoped.where((product) {
       return product.name.toLowerCase().contains(query) ||
           product.code.toLowerCase().contains(query) ||
           product.category.toLowerCase().contains(query);
@@ -127,8 +138,8 @@ class _ProductsListPageState extends ConsumerState<ProductsListPage> {
   }
 }
 
-class _CartButton extends StatelessWidget {
-  const _CartButton({required this.count, required this.onPressed});
+class CartButton extends StatelessWidget {
+  const CartButton({super.key, required this.count, required this.onPressed});
 
   final int count;
   final VoidCallback onPressed;

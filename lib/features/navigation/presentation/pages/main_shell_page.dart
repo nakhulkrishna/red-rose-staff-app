@@ -2,7 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:staff_app/features/navigation/presentation/providers/bottom_nav_provider.dart';
-import 'package:staff_app/features/products/presentation/pages/products_list_page.dart';
+import 'package:staff_app/features/products/presentation/pages/categories_page.dart';
 import 'package:staff_app/features/settings/presentation/pages/settings_page.dart';
 
 class MainShellPage extends ConsumerWidget {
@@ -13,7 +13,7 @@ class MainShellPage extends ConsumerWidget {
     final index = ref.watch(bottomNavIndexProvider);
 
     final pages = const [
-      ProductsListPage(),
+      CategoriesPage(),
       SettingsPage(),
     ];
 
