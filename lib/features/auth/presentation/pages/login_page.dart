@@ -18,6 +18,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   final _passwordController = TextEditingController();
   bool _isSignUp = false;
 
+  static final _emailRegExp = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
+
   @override
   void dispose() {
     _nameController.dispose();
@@ -34,20 +36,23 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     final isLoading = authState.isLoading;
     final error = ref.watch(authErrorMessageProvider);
 
-    ref.listen(authActionControllerProvider, (_, next) {
+    ref.listen(authActionControllerProvider, (previous, next) {
+      if (previous is! AsyncLoading) return;
       next.whenOrNull(
         data: (_) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  _isSignUp
-                      ? 'Account created successfully.'
-                      : 'Logged in successfully.',
-                ),
-              ),
-            );
-          }
+          if (!mounted) return;
+          final action =
+              ref.read(authActionControllerProvider.notifier).lastAction;
+          final message = switch (action) {
+            AuthAction.signUp =>
+              'Account created. Your account is pending admin approval.',
+            AuthAction.passwordReset =>
+              'Password reset email sent. Check your inbox.',
+            _ => 'Logged in successfully.',
+          };
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(message)));
         },
       );
     });
@@ -147,7 +152,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                       validator: (value) {
                         final v = value?.trim() ?? '';
                         if (v.isEmpty) return 'Email is required';
-                        if (!v.contains('@') || !v.contains('.')) {
+                        if (!_emailRegExp.hasMatch(v)) {
                           return 'Enter a valid email';
                         }
                         return null;
@@ -170,6 +175,14 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                         return null;
                       },
                     ),
+                    if (!_isSignUp)
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton(
+                          onPressed: isLoading ? null : _showResetPasswordDialog,
+                          child: const Text('Forgot password?'),
+                        ),
+                      ),
                     if (error != null) ...[
                       const SizedBox(height: 12),
                       Text(
@@ -231,6 +244,51 @@ class _LoginPageState extends ConsumerState<LoginPage> {
         ),
       ),
     );
+  }
+
+  Future<void> _showResetPasswordDialog() async {
+    final controller = TextEditingController(text: _emailController.text.trim());
+    final email = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Reset Password'),
+        content: TextField(
+          controller: controller,
+          keyboardType: TextInputType.emailAddress,
+          autofocus: true,
+          decoration: const InputDecoration(
+            labelText: 'Email',
+            prefixIcon: Icon(Icons.email_outlined),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () =>
+                Navigator.of(dialogContext).pop(controller.text.trim()),
+            child: const Text('Send Reset Email'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+
+    if (email == null) return;
+    if (!_emailRegExp.hasMatch(email)) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Enter a valid email address.')),
+        );
+      }
+      return;
+    }
+
+    await ref
+        .read(authActionControllerProvider.notifier)
+        .sendPasswordReset(email: email);
   }
 
   Future<void> _submit() async {

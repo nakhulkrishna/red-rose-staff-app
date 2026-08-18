@@ -35,16 +35,29 @@ final authActionControllerProvider =
       return AuthActionController(ref.read(authRepositoryProvider));
     });
 
+enum AuthAction { none, signIn, signUp, passwordReset }
+
 class AuthActionController extends StateNotifier<AsyncValue<void>> {
   AuthActionController(this._repository) : super(const AsyncData(null));
 
   final AuthRepository _repository;
 
+  AuthAction lastAction = AuthAction.none;
+
   Future<void> signIn({required String email, required String password}) async {
+    lastAction = AuthAction.signIn;
     state = const AsyncLoading();
     state = await AsyncValue.guard(
       () async =>
           _repository.signIn(email: email, password: password).then((_) {}),
+    );
+  }
+
+  Future<void> sendPasswordReset({required String email}) async {
+    lastAction = AuthAction.passwordReset;
+    state = const AsyncLoading();
+    state = await AsyncValue.guard(
+      () => _repository.sendPasswordResetEmail(email: email),
     );
   }
 
@@ -55,6 +68,7 @@ class AuthActionController extends StateNotifier<AsyncValue<void>> {
     required String email,
     required String password,
   }) async {
+    lastAction = AuthAction.signUp;
     state = const AsyncLoading();
     state = await AsyncValue.guard(
       () async => _repository
@@ -100,6 +114,10 @@ String _friendlyError(Object error) {
         return 'This email is already registered.';
       case 'weak-password':
         return 'Password is too weak.';
+      case 'too-many-requests':
+        return 'Too many attempts. Please try again later.';
+      case 'network-request-failed':
+        return 'Network error. Check your connection and try again.';
       case 'user-banned':
         return error.message ?? 'Temporarily banned.';
       default:
