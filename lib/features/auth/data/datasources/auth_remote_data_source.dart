@@ -140,7 +140,15 @@ class AuthRemoteDataSource {
     Map<String, dynamic> staffData = const <String, dynamic>{};
     try {
       final staffDoc = await _findSalesmanDoc(user);
-      staffData = staffDoc?.data ?? const <String, dynamic>{};
+      if (staffDoc != null) {
+        staffData = staffDoc.data;
+      } else {
+        // Pre-existing Auth accounts (created before self-registration wrote a
+        // salesman profile) have no catalog_staff_salesmen doc, so they never
+        // show up in the admin panel's Staffs tab. Backfill a self-owned doc
+        // (rules allow create when docId == own uid).
+        staffData = await _backfillSalesmanDoc(user, userData);
+      }
     } on FirebaseException catch (e) {
       if (!_isPermissionDenied(e)) rethrow;
     }
@@ -231,6 +239,40 @@ class AuthRemoteDataSource {
       'banReason': FieldValue.delete(),
       'updatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
+  }
+
+  Future<Map<String, dynamic>> _backfillSalesmanDoc(
+    User user,
+    Map<String, dynamic> userData,
+  ) async {
+    final email = (user.email ?? '').trim();
+    final name =
+        ((userData['fullName'] as String?) ?? user.displayName ?? '').trim();
+    final now = FieldValue.serverTimestamp();
+    final doc = <String, dynamic>{
+      'id': user.uid,
+      'uid': user.uid,
+      'name': name.isEmpty ? email : name,
+      'nameLower': (name.isEmpty ? email : name).toLowerCase(),
+      'role': 'Salesman',
+      'region': (userData['region'] as String?) ?? '',
+      'phone': (userData['phone'] as String?) ?? '',
+      'email': email,
+      'emailLower': email.toLowerCase(),
+      'imageUrl': null,
+      'dealsClosed': 0,
+      'monthlyTargetQar': 0,
+      'achievedSalesQar': 0,
+      'status': 'inactive',
+      'salesMarketAccess': 'both',
+      'createdAt': now,
+      'updatedAt': now,
+    };
+    await _firestore
+        .collection(_salesmenCollection)
+        .doc(user.uid)
+        .set(doc, SetOptions(merge: true));
+    return doc;
   }
 
   Future<_SalesmanDocHit?> _findSalesmanDoc(User user) async {
