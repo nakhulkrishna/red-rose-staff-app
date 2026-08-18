@@ -11,4 +11,9 @@ class ProductsRepositoryImpl implements ProductsRepository {
   Future<List<Product>> getProducts({required String salesMarketKey}) {
     return _remoteDataSource.getProducts(salesMarketKey: salesMarketKey);
   }
+
+  @override
+  Stream<List<Product>> watchProducts({required String salesMarketKey}) {
+    return _remoteDataSource.watchProducts(salesMarketKey: salesMarketKey);
+  }
 }

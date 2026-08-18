@@ -9,4 +9,8 @@ class GetProductsUseCase {
   Future<List<Product>> call({required String salesMarketKey}) {
     return _repository.getProducts(salesMarketKey: salesMarketKey);
   }
+
+  Stream<List<Product>> watch({required String salesMarketKey}) {
+    return _repository.watchProducts(salesMarketKey: salesMarketKey);
+  }
 }

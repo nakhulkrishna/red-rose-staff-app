@@ -20,9 +20,9 @@ final getProductsUseCaseProvider = Provider<GetProductsUseCase>((ref) {
   return GetProductsUseCase(ref.read(productsRepositoryProvider));
 });
 
-final productsProvider = FutureProvider<List<Product>>((ref) async {
+final productsProvider = StreamProvider<List<Product>>((ref) async* {
   final marketContext = await ref.watch(salesmanMarketContextProvider.future);
-  return ref
+  yield* ref
       .read(getProductsUseCaseProvider)
-      .call(salesMarketKey: marketContext.salesMarketKey);
+      .watch(salesMarketKey: marketContext.salesMarketKey);
 });

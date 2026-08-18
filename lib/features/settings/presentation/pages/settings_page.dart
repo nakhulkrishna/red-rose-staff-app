@@ -2,6 +2,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:staff_app/features/auth/presentation/providers/auth_controller.dart';
+import 'package:staff_app/features/customers/presentation/providers/customers_provider.dart';
+import 'package:staff_app/features/orders/presentation/providers/order_controller.dart';
 import 'package:staff_app/shared/providers/firebase_providers.dart';
 
 final _staffProfileProvider = StreamProvider<Map<String, dynamic>>((
@@ -190,6 +192,10 @@ class SettingsPage extends ConsumerWidget {
     );
 
     if (result == true) {
+      // Clear order state so the next account on this device does not
+      // inherit the previous user's cart or customer.
+      ref.read(cartProvider.notifier).clear();
+      ref.read(selectedCustomerProvider.notifier).state = null;
       await ref.read(authActionControllerProvider.notifier).signOut();
     }
   }

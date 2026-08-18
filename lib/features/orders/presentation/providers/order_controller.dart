@@ -409,6 +409,9 @@ class OrderSubmissionController
       });
 
       _ref.read(cartProvider.notifier).clear();
+      // Reset the selection so the next order cannot silently reuse the
+      // previous customer.
+      _ref.read(selectedCustomerProvider.notifier).state = null;
 
       final result = OrderSubmitResult.success(
         orderId: orderId,
