@@ -1,9 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:staff_app/features/customers/presentation/pages/customers_list_page.dart';
 import 'package:staff_app/features/navigation/presentation/providers/bottom_nav_provider.dart';
-import 'package:staff_app/features/orders/presentation/pages/orders_overview_page.dart';
 import 'package:staff_app/features/products/presentation/pages/products_list_page.dart';
 import 'package:staff_app/features/settings/presentation/pages/settings_page.dart';
 
@@ -16,8 +14,6 @@ class MainShellPage extends ConsumerWidget {
 
     final pages = const [
       ProductsListPage(),
-      OrdersOverviewPage(),
-      CustomersListPage(),
       SettingsPage(),
     ];
 
@@ -45,17 +41,7 @@ class MainShellPage extends ConsumerWidget {
             BottomNavigationBarItem(
               icon: Icon(CupertinoIcons.cube_box),
               activeIcon: Icon(CupertinoIcons.cube_box_fill),
-              label: 'Catalog',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(CupertinoIcons.doc_text),
-              activeIcon: Icon(CupertinoIcons.doc_text_fill),
-              label: 'Orders',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(CupertinoIcons.person_2),
-              activeIcon: Icon(CupertinoIcons.person_2_fill),
-              label: 'Customers',
+              label: 'Products',
             ),
             BottomNavigationBarItem(
               icon: Icon(CupertinoIcons.gear_alt),

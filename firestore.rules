@@ -131,10 +131,6 @@ service cloud.firestore {
           || hasPermission('settings'));
     }
 
-    function canReadProducts() {
-      return hasPermission('products') || hasPermission('orders');
-    }
-
     function canReadCustomers() {
       return hasPermission('customers') || hasPermission('orders');
     }
@@ -165,22 +161,6 @@ service cloud.firestore {
         hasPermission('dashboard');
     }
 
-    function canCreateOwnStaffProfile(docId) {
-      return signedIn() &&
-        (
-          docId == request.auth.uid ||
-          (
-            request.resource.data.uid is string &&
-            request.resource.data.uid == request.auth.uid
-          ) ||
-          (
-            request.auth.token.email is string &&
-            request.resource.data.email is string &&
-            request.resource.data.email.lower() == request.auth.token.email.lower()
-          )
-        );
-    }
-
     function selfProfileCanUpdate(uid) {
       return isSelf(uid)
         && request.resource.data.role == resource.data.role
@@ -196,6 +176,54 @@ service cloud.firestore {
           || (request.resource.data.isActive == false
             && request.resource.data.approvalStatus == 'deactivated')
         );
+    }
+
+    // ---------------------------------------------------------
+    // LEGACY APPS — custom SHA-256 auth (no Firebase Auth)
+    // Products-Management admin app + red-rose-staff-app
+    // ---------------------------------------------------------
+
+    match /Admin/{docId} {
+      allow read, write: if true;
+    }
+
+    match /staff/{docId} {
+      allow read, write: if true;
+    }
+
+    match /products/{docId} {
+      allow read, write: if true;
+    }
+
+    match /categories/{docId} {
+      allow read, write: if true;
+    }
+
+    match /orders/{docId} {
+      allow read, write: if true;
+    }
+
+    match /customers/{docId} {
+      allow read, write: if true;
+    }
+
+    match /order_whatsapp/{docId} {
+      allow read, write: if true;
+    }
+
+    match /AppConfig/{docId} {
+      allow read, write: if true;
+    }
+
+    // ---------------------------------------------------------
+    // CATALOG APP — uses real Firebase Auth
+    // ---------------------------------------------------------
+
+    // Shared app settings (e.g. the order WhatsApp number).
+    // Readable by any signed-in user; only admins may change it.
+    match /catalog_app_config/{docId} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
     }
 
     match /catalog_users/{uid} {
@@ -214,38 +242,40 @@ service cloud.firestore {
         && request.resource.data.isActive == false;
 
       allow update: if isAdmin() || selfProfileCanUpdate(uid);
-
       allow delete: if isAdmin();
     }
 
     match /catalog_products/{docId} {
-      allow read: if canReadProducts();
-      allow write: if hasPermission('products');
+      allow read: if true;
+      allow write: if signedIn();
     }
 
     match /catalog_product_categories/{docId} {
-      allow read: if canReadProducts();
+      allow read: if signedIn();
       allow write: if hasPermission('products');
     }
 
     match /catalog_orders/{docId} {
-      allow read, write: if hasPermission('orders');
+      allow read: if signedIn();
+      allow write: if signedIn();
     }
 
     match /catalog_customers/{docId} {
-      allow read: if canReadCustomers();
-      allow write: if hasPermission('customers');
+      allow read: if signedIn();
+      allow write: if signedIn();
     }
 
-    // Needed by staff app order-ID generation flow.
     match /_catalog_order_counters/{docId} {
-      allow read, write: if hasPermission('orders');
+      allow read, write: if signedIn();
     }
 
     match /catalog_staff_salesmen/{docId} {
       allow get: if canGetStaffProfile(docId);
-      allow list: if canReadStaffDirectory() || canReadUserLookupForStaffApp();
-      allow create: if hasPermission('staffs') || canCreateOwnStaffProfile(docId);
+      allow list: if signedIn()
+        || hasPermission('staffs')
+        || hasPermission('dashboard');
+      allow create: if hasPermission('staffs') ||
+        (signedIn() && docId == request.auth.uid);
       allow update, delete: if hasPermission('staffs');
     }
   }

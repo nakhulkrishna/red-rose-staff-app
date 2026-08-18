@@ -2,7 +2,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:staff_app/features/auth/presentation/providers/auth_controller.dart';
-import 'package:staff_app/features/auth/presentation/providers/salesman_market_provider.dart';
 import 'package:staff_app/shared/providers/firebase_providers.dart';
 
 final _staffProfileProvider = StreamProvider<Map<String, dynamic>>((
@@ -55,9 +54,6 @@ class SettingsPage extends ConsumerWidget {
     final region = field('region', auth?.region ?? '-');
     final phone = field('phone', auth?.phone ?? '-');
     final email = auth?.email ?? '-';
-    final priceMode =
-        ref.watch(salesmanMarketContextProvider).valueOrNull?.priceModeLabel ??
-        '-';
 
     return Scaffold(
       backgroundColor: const Color(0xFFF3F4F6),
@@ -115,7 +111,6 @@ class SettingsPage extends ConsumerWidget {
                   _InfoRow(label: 'Email', value: email),
                   _InfoRow(label: 'Phone', value: phone),
                   _InfoRow(label: 'Region', value: region),
-                  _InfoRow(label: 'Price Mode', value: priceMode),
                 ],
               ),
             ),
@@ -208,14 +203,17 @@ class _Card extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: padding ?? const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE5E7EB)),
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        padding: padding ?? const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: const Color(0xFFE5E7EB)),
+        ),
+        child: child,
       ),
-      child: child,
     );
   }
 }

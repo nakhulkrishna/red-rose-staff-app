@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:staff_app/features/customers/presentation/providers/customers_provider.dart';
-import 'package:staff_app/features/navigation/presentation/providers/bottom_nav_provider.dart';
 import 'package:staff_app/features/orders/domain/entities/market_type.dart';
 
 class CustomersListPage extends ConsumerStatefulWidget {
@@ -69,65 +68,56 @@ class _CustomersListPageState extends ConsumerState<CustomersListPage> {
                         separatorBuilder: (_, __) => const SizedBox(height: 8),
                         itemBuilder: (context, index) {
                           final customer = filtered[index];
-                          return Container(
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                color: const Color(0xFFE5E7EB),
-                              ),
-                            ),
-                            child: ListTile(
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 4,
-                              ),
-                              leading: Container(
-                                width: 38,
-                                height: 38,
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFF3F4F6),
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                child: const Icon(
-                                  Icons.person_outline,
-                                  size: 20,
+                          return Material(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                            child: Container(
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: const Color(0xFFE5E7EB),
                                 ),
                               ),
-                              title: Text(
-                                customer.name,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w700,
+                              child: ListTile(
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 4,
                                 ),
-                              ),
-                              subtitle: Text(
-                                '${customer.phone}\n${customer.marketType.label} • Outstanding QAR ${customer.outstandingBalance.toStringAsFixed(2)}',
-                              ),
-                              isThreeLine: true,
-                              trailing: widget.selectionMode
-                                  ? const Icon(Icons.check_circle_outline)
-                                  : const Icon(Icons.chevron_right),
-                              onTap: () {
-                                ref
-                                        .read(selectedCustomerProvider.notifier)
-                                        .state =
-                                    customer;
-                                if (widget.selectionMode) {
-                                  Navigator.of(context).pop(customer);
-                                } else {
+                                leading: Container(
+                                  width: 38,
+                                  height: 38,
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFF3F4F6),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: const Icon(
+                                    Icons.person_outline,
+                                    size: 20,
+                                  ),
+                                ),
+                                title: Text(
+                                  customer.name,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                subtitle: Text(
+                                  '${customer.phone}\n${customer.marketType.label} • Outstanding QAR ${customer.outstandingBalance.toStringAsFixed(2)}',
+                                ),
+                                isThreeLine: true,
+                                trailing: widget.selectionMode
+                                    ? const Icon(Icons.check_circle_outline)
+                                    : const Icon(Icons.chevron_right),
+                                onTap: () {
                                   ref
-                                          .read(bottomNavIndexProvider.notifier)
+                                          .read(
+                                            selectedCustomerProvider.notifier,
+                                          )
                                           .state =
-                                      1;
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text(
-                                        '${customer.name} selected',
-                                      ),
-                                    ),
-                                  );
-                                }
-                              },
+                                      customer;
+                                  Navigator.of(context).pop(customer);
+                                },
+                              ),
                             ),
                           );
                         },

@@ -3,12 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:staff_app/features/auth/presentation/providers/salesman_market_provider.dart';
 import 'package:staff_app/features/auth/presentation/providers/auth_controller.dart';
-import 'package:staff_app/features/customers/domain/entities/customer.dart';
 import 'package:staff_app/features/customers/presentation/providers/customers_provider.dart';
 import 'package:staff_app/features/orders/domain/entities/cart_item.dart';
 import 'package:staff_app/features/orders/domain/entities/market_type.dart';
 import 'package:staff_app/features/orders/domain/entities/product_unit.dart';
-import 'package:staff_app/features/orders/domain/entities/sales_order.dart';
 import 'package:staff_app/features/products/data/models/product_model.dart';
 import 'package:staff_app/features/products/domain/entities/product.dart';
 import 'package:staff_app/features/products/presentation/providers/product_list_provider.dart';
@@ -221,38 +219,6 @@ class _LinePricing {
 
 String _normalizeUnitKey(String unit) => unit.trim().toLowerCase();
 
-final orderHistoryProvider = StreamProvider<List<SalesOrder>>((ref) {
-  final authUser = ref.watch(authStateProvider).valueOrNull;
-  if (authUser == null) {
-    return Stream.value(const []);
-  }
-  final firestore = ref.read(firestoreProvider);
-
-  return Stream.fromFuture(
-    _resolveSalesmanIdentifiers(
-      firestore: firestore,
-      uid: authUser.uid,
-      email: authUser.email,
-    ),
-  ).asyncExpand((ids) {
-    if (ids.isEmpty) {
-      return Stream.value(const <SalesOrder>[]);
-    }
-    return firestore
-        .collection('catalog_orders')
-        .where('salesmanId', whereIn: ids.take(10).toList())
-        .snapshots()
-        .map((snapshot) {
-          final orders =
-              snapshot.docs
-                  .map((doc) => _salesOrderFromDoc(doc.id, doc.data()))
-                  .toList()
-                ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
-          return orders;
-        });
-  });
-});
-
 final orderSubtotalProvider = Provider<double>((ref) {
   final cart = ref.watch(cartProvider);
   return cart.fold(0.0, (total, item) => total + item.total);
@@ -262,29 +228,6 @@ final orderDiscountProvider = Provider<double>((ref) => 0);
 
 final orderGrandTotalProvider = Provider<double>((ref) {
   return ref.watch(orderSubtotalProvider) - ref.watch(orderDiscountProvider);
-});
-
-final todaySummaryProvider = Provider<Map<String, num>>((ref) {
-  final now = DateTime.now();
-  final history = ref.watch(orderHistoryProvider).valueOrNull ?? const [];
-  final todaysOrders = history.where((order) {
-    return order.createdAt.year == now.year &&
-        order.createdAt.month == now.month &&
-        order.createdAt.day == now.day;
-  }).toList();
-  final totalSales = todaysOrders.fold<double>(
-    0.0,
-    (total, o) => total + o.grandTotal,
-  );
-  return {
-    'totalSales': totalSales,
-    'orders': todaysOrders.length,
-    'pending': 0,
-  };
-});
-
-final todayDateLabelProvider = Provider<String>((ref) {
-  return DateFormat('EEE, dd MMM yyyy').format(DateTime.now());
 });
 
 final productByIdProvider = Provider.family<Product?, String>((ref, id) {
@@ -506,104 +449,6 @@ class OrderSubmissionController
   }
 }
 
-Future<List<String>> _resolveSalesmanIdentifiers({
-  required FirebaseFirestore firestore,
-  required String uid,
-  required String email,
-}) async {
-  final ids = <String>{uid};
-  final staff = firestore.collection('catalog_staff_salesmen');
-
-  final byUid = await staff.where('uid', isEqualTo: uid).limit(1).get();
-  for (final doc in byUid.docs) {
-    ids.add(doc.id);
-    final code = (doc.data()['id'] as String?)?.trim() ?? '';
-    if (code.isNotEmpty) ids.add(code);
-  }
-
-  if (email.isNotEmpty) {
-    final byEmail = await staff.where('email', isEqualTo: email).limit(1).get();
-    for (final doc in byEmail.docs) {
-      ids.add(doc.id);
-      final code = (doc.data()['id'] as String?)?.trim() ?? '';
-      if (code.isNotEmpty) ids.add(code);
-    }
-  }
-
-  final byDoc = await staff.doc(uid).get();
-  if (byDoc.exists) {
-    ids.add(byDoc.id);
-    final code = (byDoc.data()?['id'] as String?)?.trim() ?? '';
-    if (code.isNotEmpty) ids.add(code);
-  }
-
-  return ids.where((id) => id.trim().isNotEmpty).toList();
-}
-
-SalesOrder _salesOrderFromDoc(String fallbackId, Map<String, dynamic> data) {
-  var createdAt = DateTime.now();
-  final dateRaw = data['orderDate'];
-  if (dateRaw is Timestamp) {
-    createdAt = dateRaw.toDate();
-  }
-
-  final itemsRaw = (data['items'] as List?) ?? const [];
-  final items = itemsRaw.asMap().entries.map((entry) {
-    final index = entry.key;
-    final itemMap = entry.value is Map<String, dynamic>
-        ? entry.value as Map<String, dynamic>
-        : <String, dynamic>{};
-    final qty = (itemMap['qty'] as num?)?.toDouble() ?? 0;
-    final applied = (itemMap['appliedPriceQar'] as num?)?.toDouble();
-    final unit = (itemMap['unitPriceQar'] as num?)?.toDouble();
-    final lineTotal = (itemMap['lineTotalQar'] as num?)?.toDouble() ?? 0;
-    final resolvedUnit = applied ?? unit ?? (qty == 0 ? 0 : lineTotal / qty);
-    final productCode = (itemMap['productCode'] as String?) ?? '';
-    final productId = (itemMap['productId'] as String?) ?? productCode;
-
-    return CartItem(
-      lineId: '$fallbackId-$index',
-      productId: productId,
-      productCode: productCode,
-      productName: (itemMap['productName'] as String?) ?? 'Product',
-      unitCode: (itemMap['unit'] as String?) ?? '',
-      allowDecimal: true,
-      multiplierToBase:
-          (itemMap['conversionToBaseUnit'] as num?)?.toDouble() ?? 1,
-      quantity: qty,
-      unitPrice: resolvedUnit,
-      regularPriceQar:
-          (itemMap['unitPriceQar'] as num?)?.toDouble() ?? resolvedUnit,
-      offerPriceQar: (itemMap['offerPriceQar'] as num?)?.toDouble() ?? 0,
-      appliedPriceQar: applied ?? resolvedUnit,
-      appliedMarketKey:
-          (itemMap['appliedMarketKey'] as String?) ??
-          (data['salesMarketKey'] as String?) ??
-          'local_market',
-    );
-  }).toList();
-
-  final subtotal = items.fold<double>(0, (total, item) => total + item.total);
-  final grandTotal = (data['amountQar'] as num?)?.toDouble() ?? subtotal;
-  final customer = Customer(
-    id: (data['customerId'] as String?) ?? '',
-    name: (data['customerName'] as String?) ?? 'Customer',
-    phone: (data['customerPhone'] as String?) ?? '',
-    marketType: MarketType.local,
-    outstandingBalance: 0,
-  );
-
-  return SalesOrder(
-    id: (data['id'] as String?) ?? fallbackId,
-    createdAt: createdAt,
-    customer: customer,
-    items: items,
-    subtotal: subtotal,
-    discount: (subtotal - grandTotal).clamp(0, subtotal).toDouble(),
-    grandTotal: grandTotal,
-  );
-}
-
 class OrderSubmitResult {
   const OrderSubmitResult._({
     required this.ok,
@@ -633,12 +478,3 @@ class OrderSubmitResult {
   final String? customerPhone;
   final double? amountQar;
 }
-
-final confirmOrderProvider = Provider<Future<String?> Function()>((ref) {
-  return () async {
-    final result = await ref
-        .read(orderSubmissionControllerProvider.notifier)
-        .submitOrder();
-    return result.ok ? null : result.error;
-  };
-});

@@ -3,13 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:staff_app/features/auth/presentation/providers/auth_controller.dart';
 import 'package:staff_app/features/auth/presentation/providers/salesman_market_provider.dart';
+import 'package:staff_app/features/customers/domain/entities/customer.dart';
+import 'package:staff_app/features/customers/presentation/pages/customers_list_page.dart';
 import 'package:staff_app/features/customers/presentation/providers/customers_provider.dart';
 import 'package:staff_app/features/orders/domain/entities/cart_item.dart';
 import 'package:staff_app/features/orders/domain/entities/product_unit.dart';
+import 'package:staff_app/features/orders/presentation/pages/order_success_page.dart';
 import 'package:staff_app/features/orders/presentation/providers/order_controller.dart';
-import 'package:staff_app/shared/providers/whatsapp_order_number_provider.dart';
-import 'package:staff_app/shared/widgets/price_mode_banner.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 class OrderSummaryPage extends ConsumerStatefulWidget {
   const OrderSummaryPage({super.key});
@@ -28,33 +28,56 @@ class _OrderSummaryPageState extends ConsumerState<OrderSummaryPage> {
     final grandTotal = ref.watch(orderGrandTotalProvider);
     final submitState = ref.watch(orderSubmissionControllerProvider);
     final isSubmitting = submitState.isLoading;
-    final marketContext = ref.watch(salesmanMarketContextProvider).valueOrNull;
-    final priceModeLabel = marketContext?.priceModeLabel ?? 'Local Market';
 
     return Scaffold(
       appBar: AppBar(title: const Text('Review Order')),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(12, 10, 12, 120),
         children: [
-          PriceModeBanner(label: priceModeLabel),
-          const SizedBox(height: 10),
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFFE5E7EB)),
+              border: Border.all(
+                color: customer == null
+                    ? const Color(0xFFFCA5A5)
+                    : const Color(0xFFE5E7EB),
+              ),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            child: Row(
               children: [
-                const Text(
-                  'Customer Details',
-                  style: TextStyle(fontWeight: FontWeight.w700),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Customer',
+                        style: TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        customer?.name ?? 'No customer selected',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color: customer == null
+                              ? const Color(0xFFB91C1C)
+                              : const Color(0xFF111827),
+                        ),
+                      ),
+                      if (customer != null)
+                        Text(
+                          customer.phone,
+                          style: const TextStyle(color: Color(0xFF6B7280)),
+                        ),
+                    ],
+                  ),
                 ),
-                const SizedBox(height: 6),
-                Text(customer?.name ?? 'No customer selected'),
-                Text(customer?.phone ?? '-'),
+                OutlinedButton.icon(
+                  onPressed: _pickCustomer,
+                  icon: const Icon(Icons.person_search_outlined, size: 18),
+                  label: Text(customer == null ? 'Select' : 'Change'),
+                ),
               ],
             ),
           ),
@@ -121,14 +144,20 @@ class _OrderSummaryPageState extends ConsumerState<OrderSummaryPage> {
               child: FilledButton(
                 onPressed: cart.isEmpty || isSubmitting
                     ? null
-                    : _placeOrderAndSendBill,
+                    : (customer == null
+                          ? _pickCustomer
+                          : _placeOrderAndSendBill),
                 child: isSubmitting
                     ? const SizedBox(
                         width: 18,
                         height: 18,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : const Text('Place Order & Send Bill'),
+                    : Text(
+                        customer == null
+                            ? 'Select Customer'
+                            : 'Place Order & Send Bill',
+                      ),
               ),
             ),
           ],
@@ -162,9 +191,8 @@ class _OrderSummaryPageState extends ConsumerState<OrderSummaryPage> {
 
   Future<void> _editLine(CartItem line) async {
     final product = ref.read(productByIdProvider(line.productId));
-    final customer = ref.read(selectedCustomerProvider);
     final marketType = ref.read(salesmanMarketTypeProvider);
-    if (product == null || customer == null) return;
+    if (product == null) return;
 
     ProductUnit unit = product.units.firstWhere((u) => u.code == line.unitCode);
     final qtyController = TextEditingController(text: line.quantity.toString());
@@ -267,6 +295,17 @@ class _OrderSummaryPageState extends ConsumerState<OrderSummaryPage> {
     return buffer.toString();
   }
 
+  Future<void> _pickCustomer() async {
+    final picked = await Navigator.of(context).push<Customer>(
+      MaterialPageRoute(
+        builder: (_) => const CustomersListPage(selectionMode: true),
+      ),
+    );
+    if (picked != null) {
+      ref.read(selectedCustomerProvider.notifier).state = picked;
+    }
+  }
+
   Future<void> _placeOrderAndSendBill() async {
     // Captured before submitting: submitOrder() clears the cart.
     final items = List<CartItem>.from(ref.read(cartProvider));
@@ -284,49 +323,28 @@ class _OrderSummaryPageState extends ConsumerState<OrderSummaryPage> {
       return;
     }
 
-    final phone = await ref.read(whatsappOrderNumberProvider.future);
-    if (!mounted) return;
-    if (phone == null || phone.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Order placed: ${result.orderId}. WhatsApp order number is not '
-            'configured in the dashboard.',
-          ),
-        ),
-      );
-      Navigator.of(context).pop();
-      return;
-    }
+    final itemCount = items.length;
+    final message = _buildOrderMessage(
+      orderId: result.orderId ?? '-',
+      salesmanName: salesmanName,
+      customerName: customerName,
+      items: items,
+      totalQar: result.amountQar ?? 0,
+    );
 
-    final msg = Uri.encodeComponent(
-      _buildOrderMessage(
-        orderId: result.orderId ?? '-',
-        salesmanName: salesmanName,
-        customerName: customerName,
-        items: items,
-        totalQar: result.amountQar ?? 0,
+    await Navigator.of(context).pushReplacement(
+      MaterialPageRoute(
+        builder: (_) => OrderSuccessPage(
+          orderId: result.orderId ?? '-',
+          customerName: customerName,
+          itemCount: itemCount,
+          totalQar: result.amountQar ?? 0,
+          message: message,
+        ),
       ),
     );
-    final uri = Uri.parse('https://wa.me/$phone?text=$msg');
-    final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
-    if (!mounted) return;
-    if (!opened) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Order placed: ${result.orderId}. Could not open WhatsApp.',
-          ),
-        ),
-      );
-      Navigator.of(context).pop();
-      return;
-    }
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text('Order placed: ${result.orderId}')));
-    Navigator.of(context).pop();
   }
+
 }
 
 class _OrderLineCard extends StatelessWidget {
