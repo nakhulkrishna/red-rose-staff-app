@@ -332,7 +332,7 @@ class _PriceTable extends StatelessWidget {
                             color: Color(0xFF047857),
                           ),
                         ),
-                        if (offer != null)
+                        if (offer != null && offer < price)
                           Text(
                             'QAR ${price.toStringAsFixed(2)}',
                             style: const TextStyle(

@@ -86,7 +86,9 @@ class ProductModel extends Product {
     final displayOffer =
         marketUnitOfferPrices[selectedMarket]?[baseUnitKey] ?? 0;
     final availableQty =
-        (inventory['availableQtyBaseUnit'] as num?)?.toDouble() ?? 0;
+        _toDouble(inventory['availableQtyBaseUnit']) ??
+        _toDouble(inventory['baseUnitQty']) ??
+        0;
 
     return ProductModel(
       id: id,
@@ -132,18 +134,20 @@ String _readKeyOrValue(dynamic value, {required String fallback}) {
 }
 
 List<ProductUnit> _readSaleUnits(dynamic saleUnits, String baseUnit) {
+  final baseKey = _normalizeUnitKey(baseUnit);
   if (saleUnits is List && saleUnits.isNotEmpty) {
     return saleUnits.whereType<Map<String, dynamic>>().map((unitMap) {
       final unitName =
           (unitMap['name'] as String?) ??
           (unitMap['key'] as String?) ??
           baseUnit;
-      final multiplier =
-          (unitMap['conversionToBaseUnit'] as num?)?.toDouble() ?? 1.0;
+      final multiplier = _toDouble(unitMap['conversionToBaseUnit']) ?? 1.0;
       return ProductUnit(
         code: unitName,
         multiplierToBase: multiplier,
-        allowDecimal: true,
+        // Fractional quantities only make sense for the base unit (2.5 KG),
+        // not for pack units (half a CTN cannot be sold).
+        allowDecimal: _normalizeUnitKey(unitName) == baseKey,
       );
     }).toList();
   }
@@ -168,8 +172,8 @@ Map<MarketType, double> _readMarketPrices(
   final baseEntry = _findUnitPriceEntry(prices, normalizedBase);
   if (baseEntry == null) return <MarketType, double>{};
   final regular =
-      (baseEntry['autoPriceQar'] as num?)?.toDouble() ??
-      (baseEntry['manualPriceQar'] as num?)?.toDouble() ??
+      _toDouble(baseEntry['manualPriceQar']) ??
+      _toDouble(baseEntry['autoPriceQar']) ??
       0;
   if (regular <= 0) return <MarketType, double>{};
   return <MarketType, double>{selectedMarket: regular};
@@ -199,11 +203,11 @@ Map<MarketType, Map<String, double>> _readMarketUnitPrices(
         unitEntry.key;
     final unitKey = _normalizeUnitKey(rawUnit);
     final value = useOfferPrice
-        ? (unitData['autoOfferPriceQar'] as num?)?.toDouble() ??
-              (unitData['manualOfferPriceQar'] as num?)?.toDouble() ??
+        ? _toDouble(unitData['manualOfferPriceQar']) ??
+              _toDouble(unitData['autoOfferPriceQar']) ??
               0
-        : (unitData['autoPriceQar'] as num?)?.toDouble() ??
-              (unitData['manualPriceQar'] as num?)?.toDouble() ??
+        : _toDouble(unitData['manualPriceQar']) ??
+              _toDouble(unitData['autoPriceQar']) ??
               0;
     if (value > 0) {
       unitMap[unitKey] = value;
@@ -255,3 +259,12 @@ MarketType? _marketTypeFromKey(String key) {
 }
 
 String _normalizeUnitKey(String unit) => unit.trim().toLowerCase();
+
+/// Firestore stores many numeric fields as strings (e.g. bulk-uploaded
+/// products have `"conversionToBaseUnit": "5"`). Accept both, like the
+/// admin app does.
+double? _toDouble(Object? value) {
+  if (value is num) return value.toDouble();
+  if (value is String) return double.tryParse(value.trim());
+  return null;
+}

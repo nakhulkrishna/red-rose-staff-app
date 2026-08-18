@@ -16,7 +16,11 @@ double resolveUnitPrice(Product product, MarketType market, ProductUnit unit) {
   return basePrice * unit.multiplierToBase;
 }
 
-/// Discounted price for one [unit], or null when no offer is configured.
+/// Offer price for one [unit], or null when no offer is configured.
+///
+/// When an offer exists it is the price actually charged (matching the
+/// cart and the admin panel), so it is returned even if it is not lower
+/// than the regular price.
 double? resolveUnitOfferPrice(
   Product product,
   MarketType market,
@@ -25,8 +29,7 @@ double? resolveUnitOfferPrice(
   final unitKey = unit.code.trim().toLowerCase();
   final offer = product.marketUnitOfferPrices[market]?[unitKey];
   if (offer == null || offer <= 0) return null;
-  final regular = resolveUnitPrice(product, market, unit);
-  return offer < regular ? offer : null;
+  return offer;
 }
 
 /// Images to show for a product, tolerating either field being empty.
