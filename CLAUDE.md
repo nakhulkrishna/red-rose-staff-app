@@ -25,8 +25,8 @@ Firestore rules: `firestore.rules` here is the synced copy of the LIVE rules plu
 Entry: `main.dart` → `core/bootstrap/bootstrap.dart` (error handlers, image-cache caps, Firebase init) → `ProviderScope` → `AuthGatePage`.
 
 - **State:** Riverpod 2, hand-written providers in `features/<feature>/presentation/providers/` and `shared/providers/`. Firebase is injected via `firebaseAuthProvider`/`firestoreProvider`.
-- **Navigation:** no router. `AuthGatePage` → `LoginPage` | pending-approval screen | `MainShellPage` (two tabs: Products, Settings). Everything else is `Navigator.push`. Customers screen exists only as a selection picker opened from checkout.
-- **Auth** (`features/auth/`): Firebase email/password. Sign-up writes `catalog_users/{uid}` with `role: 'Salesman'`, `approvalStatus: 'pending'`, `isActive: false` (the rules enforce exactly this contract) plus a UID-keyed `catalog_staff_salesmen` profile so the admin Staffs tab lists it. Admin approves from the panel; the gate blocks pending/deactivated users. Password reset from login page and settings.
+- **Navigation:** no router. `AuthGatePage` → `LoginPage` | `MainShellPage` (two tabs: Products, Settings). Everything else is `Navigator.push`. Customers screen exists only as a selection picker opened from checkout.
+- **Auth** (`features/auth/`): Firebase email/password. Sign-up needs only email + password; it writes `catalog_users/{uid}` with `role: 'Salesman'`, `approvalStatus: 'approved'`, `isActive: true` (name derived from the email prefix) plus a UID-keyed active `catalog_staff_salesmen` profile so the admin Staffs tab lists it. No approval flow — new accounts work immediately. Password reset from login page and settings.
 - **Ordering flow:** `products_list_page.dart` (cards) → `product_detail_page.dart` (unit selection, quantity, add to cart) → `order_summary_page.dart` (inline customer picker; checkout button doubles as "Select Customer") → writes `catalog_orders/{ORD-yyyyMMdd-###}` (ID via transaction on `_catalog_order_counters`) → `order_success_page.dart` auto-opens WhatsApp with the formatted bill and can resend. Cart and selected customer are cleared after submit and on logout.
 - **Stock/prices are live:** `productsProvider` is a StreamProvider over `catalog_products` snapshots; the admin Cloud Function `deductInventoryOnOrderCreate` decrements stock after each order and the stream picks it up.
 
@@ -47,4 +47,4 @@ Entry: `main.dart` → `core/bootstrap/bootstrap.dart` (error handlers, image-ca
 
 - `asstes/` (misspelled) is a real folder referenced by pubspec — don't rename without updating pubspec.
 - Root `package.json`/`node_modules` are stray; functions deps live in `functions/package.json`.
-- Ban enforcement reads `accountStatus` on `catalog_staff_salesmen`, but the ban Cloud Functions write to `catalog_users` — known drift.
+- Bans were removed (no client enforcement); the legacy ban Cloud Functions may still be deployed but nothing calls them.

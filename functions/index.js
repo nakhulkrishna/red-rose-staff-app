@@ -9,7 +9,6 @@
 
 const {setGlobalOptions} = require("firebase-functions");
 const {onRequest} = require("firebase-functions/https");
-const {onCall, HttpsError} = require("firebase-functions/v2/https");
 
 const {onSchedule} = require("firebase-functions/v2/scheduler");
 
@@ -18,23 +17,6 @@ const admin = require("firebase-admin");
 admin.initializeApp();
 const db = admin.firestore();
 
-async function assertAdmin(context) {
-  if (!context.auth || !context.auth.uid) {
-    throw new HttpsError("unauthenticated", "Authentication is required.");
-  }
-
-  const snapshot = await db
-      .collection("catalog_users")
-      .doc(context.auth.uid)
-      .get();
-  const role = (snapshot.data()?.role || "").toString().toLowerCase();
-  if (role !== "admin" && role !== "manager") {
-    throw new HttpsError(
-        "permission-denied",
-        "Only admins/managers can ban or unban users.",
-    );
-  }
-}
 
 // For cost control, you can set the maximum number of containers that can be
 // running at the same time. This helps mitigate the impact of unexpected
@@ -102,61 +84,4 @@ exports.testDeleteOrders = onRequest(async (req, res) => {
   }
 });
 
-exports.banCatalogUser = onCall(async (request) => {
-  await assertAdmin(request);
 
-  const targetUid = (request.data?.uid || "").toString().trim();
-  const reason = (request.data?.banReason || "").toString().trim();
-  const days = Number(request.data?.days || 0);
-  const customDateMs = Number(request.data?.banUntilMs || 0);
-
-  if (!targetUid) {
-    throw new HttpsError("invalid-argument", "Target uid is required.");
-  }
-
-  let banUntil = null;
-  if (customDateMs > 0) {
-    banUntil = admin.firestore.Timestamp.fromMillis(customDateMs);
-  } else if (days > 0) {
-    const until = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
-    banUntil = admin.firestore.Timestamp.fromDate(until);
-  }
-
-  if (!banUntil) {
-    throw new HttpsError(
-        "invalid-argument",
-        "Provide either days or banUntilMs.",
-    );
-  }
-
-  await db.collection("catalog_users").doc(targetUid).set({
-    accountStatus: "banned",
-    banUntil: banUntil,
-    banReason: reason || null,
-    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-  }, {merge: true});
-
-  return {
-    uid: targetUid,
-    accountStatus: "banned",
-    banUntilMs: banUntil.toMillis(),
-  };
-});
-
-exports.unbanCatalogUser = onCall(async (request) => {
-  await assertAdmin(request);
-
-  const targetUid = (request.data?.uid || "").toString().trim();
-  if (!targetUid) {
-    throw new HttpsError("invalid-argument", "Target uid is required.");
-  }
-
-  await db.collection("catalog_users").doc(targetUid).set({
-    accountStatus: "active",
-    banUntil: admin.firestore.FieldValue.delete(),
-    banReason: admin.firestore.FieldValue.delete(),
-    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-  }, {merge: true});
-
-  return {uid: targetUid, accountStatus: "active"};
-});

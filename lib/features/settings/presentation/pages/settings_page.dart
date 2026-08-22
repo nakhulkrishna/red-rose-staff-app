@@ -53,8 +53,6 @@ class SettingsPage extends ConsumerWidget {
 
     final name = field('name', auth?.name.isNotEmpty == true ? auth!.name : 'Salesman');
     final role = field('role', 'Salesman');
-    final region = field('region', auth?.region ?? '-');
-    final phone = field('phone', auth?.phone ?? '-');
     final email = auth?.email ?? '-';
 
     return Scaffold(
@@ -111,8 +109,6 @@ class SettingsPage extends ConsumerWidget {
               child: Column(
                 children: [
                   _InfoRow(label: 'Email', value: email),
-                  _InfoRow(label: 'Phone', value: phone),
-                  _InfoRow(label: 'Region', value: region),
                 ],
               ),
             ),

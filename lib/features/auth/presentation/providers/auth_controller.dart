@@ -62,9 +62,6 @@ class AuthActionController extends StateNotifier<AsyncValue<void>> {
   }
 
   Future<void> signUp({
-    required String name,
-    required String region,
-    required String phone,
     required String email,
     required String password,
   }) async {
@@ -72,13 +69,7 @@ class AuthActionController extends StateNotifier<AsyncValue<void>> {
     state = const AsyncLoading();
     state = await AsyncValue.guard(
       () async => _repository
-          .signUp(
-            name: name,
-            region: region,
-            phone: phone,
-            email: email,
-            password: password,
-          )
+          .signUp(email: email, password: password)
           .then((_) {}),
     );
   }
@@ -118,8 +109,6 @@ String _friendlyError(Object error) {
         return 'Too many attempts. Please try again later.';
       case 'network-request-failed':
         return 'Network error. Check your connection and try again.';
-      case 'user-banned':
-        return error.message ?? 'Temporarily banned.';
       default:
         return error.message ?? 'Authentication failed.';
     }

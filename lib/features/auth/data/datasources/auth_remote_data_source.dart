@@ -1,6 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:intl/intl.dart';
 import 'package:staff_app/features/auth/data/models/app_user_model.dart';
 
 class AuthRemoteDataSource {
@@ -46,9 +45,6 @@ class AuthRemoteDataSource {
   }
 
   Future<AppUserModel> signUp({
-    required String name,
-    required String region,
-    required String phone,
     required String email,
     required String password,
   }) async {
@@ -64,48 +60,44 @@ class AuthRemoteDataSource {
       );
     }
 
-    await user.updateDisplayName(name);
-    final cleanedName = name.trim();
     final cleanedEmail = email.trim();
+    // Display name defaults to the email prefix; admins can edit real
+    // details later from the admin panel's Staffs tab.
+    final derivedName = cleanedEmail.split('@').first;
+    await user.updateDisplayName(derivedName);
     final now = FieldValue.serverTimestamp();
 
-    // Self-registration contract enforced by firestore.rules on catalog_users:
-    // own uid as doc id, role Staff/Salesman, approvalStatus 'pending',
-    // isActive false. An admin approves the account from the admin panel.
     await _firestore.collection(_usersCollection).doc(user.uid).set({
       'uid': user.uid,
-      'fullName': cleanedName,
+      'fullName': derivedName,
       'email': cleanedEmail,
-      'phone': phone,
-      'region': region,
+      'phone': '',
+      'region': '',
       'role': 'Salesman',
-      'requestedRole': 'Salesman',
-      'approvalStatus': 'pending',
-      'isActive': false,
+      'approvalStatus': 'approved',
+      'isActive': true,
       'permissions': <String, dynamic>{},
       'createdAt': now,
       'updatedAt': now,
     });
 
-    // Also create a self-owned salesman profile (allowed by rules for
-    // docId == own uid) so the admin panel's Staffs tab lists the new
-    // salesman immediately. It starts inactive; the admin's activate toggle
-    // also approves the linked catalog_users account by email.
+    // Self-owned salesman profile so the admin panel's Staffs tab lists the
+    // new salesman immediately.
     await _firestore.collection(_salesmenCollection).doc(user.uid).set({
       'id': user.uid,
       'uid': user.uid,
-      'name': cleanedName,
-      'nameLower': cleanedName.toLowerCase(),
+      'name': derivedName,
+      'nameLower': derivedName.toLowerCase(),
       'role': 'Salesman',
-      'region': region,
-      'phone': phone,
+      'region': '',
+      'phone': '',
       'email': cleanedEmail,
       'emailLower': cleanedEmail.toLowerCase(),
       'imageUrl': null,
       'dealsClosed': 0,
       'monthlyTargetQar': 0,
       'achievedSalesQar': 0,
-      'status': 'inactive',
+      'status': 'active',
       'salesMarketAccess': 'both',
       'createdAt': now,
       'updatedAt': now,
@@ -123,8 +115,6 @@ class AuthRemoteDataSource {
   }
 
   Future<AppUserModel> _buildUser(User user) async {
-    await _enforceBanPolicy(user);
-
     final email = user.email ?? '';
     Map<String, dynamic> userData = const <String, dynamic>{};
     try {
@@ -162,83 +152,13 @@ class AuthRemoteDataSource {
     final phone =
         (userData['phone'] as String?) ?? (staffData['phone'] as String?) ?? '';
 
-    // Approval state lives on catalog_users (managed by the admin panel).
-    // Missing fields are treated as approved/active so pre-existing salesmen
-    // without a catalog_users doc keep working, matching the rules' leniency.
-    final statusSource = userData.isNotEmpty ? userData : staffData;
-
     return AppUserModel(
       uid: user.uid,
       email: email,
       name: name,
       region: region,
       phone: phone,
-      approvalStatus: _readApprovalStatus(statusSource),
-      isActive: _readIsActive(statusSource),
     );
-  }
-
-  String _readApprovalStatus(Map<String, dynamic> data) {
-    final raw = data['approvalStatus'];
-    if (raw is String && raw.trim().isNotEmpty) return raw.trim();
-    return 'approved';
-  }
-
-  bool _readIsActive(Map<String, dynamic> data) {
-    final raw = data['isActive'];
-    if (raw is bool) return raw;
-    if (raw is String) return raw.toLowerCase() != 'false';
-    return true;
-  }
-
-  Future<void> _enforceBanPolicy(User user) async {
-    _SalesmanDocHit? staffDoc;
-    try {
-      staffDoc = await _findSalesmanDoc(user);
-    } on FirebaseException catch (e) {
-      if (_isPermissionDenied(e)) return;
-      rethrow;
-    }
-    if (staffDoc == null) {
-      return;
-    }
-
-    final data = staffDoc.data;
-    final accountStatus = ((data['accountStatus'] as String?) ?? 'active')
-        .trim()
-        .toLowerCase();
-    if (accountStatus != 'banned') {
-      return;
-    }
-
-    final rawBanUntil = data['banUntil'];
-    final banUntil = rawBanUntil is Timestamp ? rawBanUntil.toDate() : null;
-    final now = DateTime.now();
-
-    if (banUntil != null && !banUntil.isAfter(now)) {
-      try {
-        await _clearExpiredBan(staffDoc.ref);
-      } on FirebaseException catch (e) {
-        if (!_isPermissionDenied(e)) rethrow;
-      }
-      return;
-    }
-
-    await _auth.signOut();
-
-    final message = banUntil == null
-        ? 'Temporarily banned.'
-        : 'Temporarily banned until ${DateFormat('dd MMM yyyy, hh:mm a').format(banUntil.toLocal())}.';
-    throw FirebaseAuthException(code: 'user-banned', message: message);
-  }
-
-  Future<void> _clearExpiredBan(DocumentReference<Map<String, dynamic>> ref) {
-    return ref.set({
-      'accountStatus': 'active',
-      'banUntil': FieldValue.delete(),
-      'banReason': FieldValue.delete(),
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
   }
 
   Future<Map<String, dynamic>> _backfillSalesmanDoc(
@@ -263,7 +183,7 @@ class AuthRemoteDataSource {
       'dealsClosed': 0,
       'monthlyTargetQar': 0,
       'achievedSalesQar': 0,
-      'status': 'inactive',
+      'status': 'active',
       'salesMarketAccess': 'both',
       'createdAt': now,
       'updatedAt': now,

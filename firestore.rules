@@ -31,28 +31,6 @@ service cloud.firestore {
       return signedIn() && request.auth.uid == uid;
     }
 
-    function profileIsActive(user) {
-      return !('isActive' in user) ||
-        user.isActive == true ||
-        ((user.isActive is string) && user.isActive.lower() == 'true');
-    }
-
-    function profileIsApproved(user) {
-      return !('approvalStatus' in user) ||
-        (
-          (user.approvalStatus is string) &&
-          user.approvalStatus.lower() == 'approved'
-        );
-    }
-
-    function profileIsNotBanned(user) {
-      return !('accountStatus' in user) ||
-        !(
-          (user.accountStatus is string) &&
-          user.accountStatus.lower() == 'banned'
-        );
-    }
-
     function isAdminRole(user) {
       return (user.role is string) &&
         user.role.lower().matches('.*(admin|manager).*');
@@ -88,44 +66,31 @@ service cloud.firestore {
         (user.permissions[permissionKey] == true);
     }
 
-    function isApprovedActive(user) {
-      return profileIsActive(user) &&
-        profileIsApproved(user) &&
-        profileIsNotBanned(user);
-    }
-
     function isAdmin() {
       let user = currentUser();
-      return user != null &&
-        isAdminRole(user) &&
-        profileIsActive(user);
+      return user != null && isAdminRole(user);
     }
 
     function isDeveloper() {
       let user = currentUser();
-      return user != null &&
-        isDeveloperRole(user) &&
-        profileIsActive(user);
+      return user != null && isDeveloperRole(user);
     }
 
     function hasPermission(permissionKey) {
       let user = currentUser();
       return user != null &&
-        isApprovedActive(user) &&
         (isAdminRole(user)
           || hasExplicitPermission(user, permissionKey)
           || roleDefaultPermission(user, permissionKey));
     }
 
-    function isApprovedActiveStaff() {
+    function isStaff() {
       let user = currentUser();
-      return user != null &&
-        isStaffRole(user) &&
-        isApprovedActive(user);
+      return user != null && isStaffRole(user);
     }
 
     function canReadUserLookupForStaffApp() {
-      return isApprovedActiveStaff() &&
+      return isStaff() &&
         (hasPermission('orders')
           || hasPermission('customers')
           || hasPermission('settings'));
@@ -163,19 +128,8 @@ service cloud.firestore {
 
     function selfProfileCanUpdate(uid) {
       return isSelf(uid)
-        && request.resource.data.role == resource.data.role
-        && request.resource.data.requestedRole == resource.data.requestedRole
-        && request.resource.data.permissions == resource.data.permissions
-        && (
-          request.resource.data.isActive == resource.data.isActive
-          || (resource.data.isActive == true
-            && request.resource.data.isActive == false)
-        )
-        && (
-          request.resource.data.approvalStatus == resource.data.approvalStatus
-          || (request.resource.data.isActive == false
-            && request.resource.data.approvalStatus == 'deactivated')
-        );
+        && request.resource.data.get('role', '') == resource.data.get('role', '')
+        && request.resource.data.get('permissions', {}) == resource.data.get('permissions', {});
     }
 
     // ---------------------------------------------------------
@@ -236,10 +190,7 @@ service cloud.firestore {
       allow create: if isSelf(uid)
         && request.resource.data.uid == request.auth.uid
         && (request.resource.data.role == 'Staff'
-          || request.resource.data.role == 'Salesman')
-        && request.resource.data.requestedRole is string
-        && request.resource.data.approvalStatus == 'pending'
-        && request.resource.data.isActive == false;
+          || request.resource.data.role == 'Salesman');
 
       allow update: if isAdmin() || selfProfileCanUpdate(uid);
       allow delete: if isAdmin();
@@ -276,7 +227,9 @@ service cloud.firestore {
         || hasPermission('dashboard');
       allow create: if hasPermission('staffs') ||
         (signedIn() && docId == request.auth.uid);
-      allow update, delete: if hasPermission('staffs');
+      allow update: if hasPermission('staffs') ||
+        (signedIn() && docId == request.auth.uid);
+      allow delete: if hasPermission('staffs');
     }
   }
 }

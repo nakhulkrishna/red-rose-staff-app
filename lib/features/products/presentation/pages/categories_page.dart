@@ -4,8 +4,8 @@ import 'package:staff_app/features/orders/presentation/pages/order_summary_page.
 import 'package:staff_app/features/orders/presentation/providers/order_controller.dart';
 import 'package:staff_app/features/products/domain/entities/product.dart';
 import 'package:staff_app/features/products/presentation/pages/products_list_page.dart';
+import 'package:staff_app/features/products/presentation/providers/category_images_provider.dart';
 import 'package:staff_app/features/products/presentation/providers/product_list_provider.dart';
-import 'package:staff_app/features/products/domain/entities/product_pricing.dart';
 
 /// Landing screen of the Products tab: pick a category first, then browse
 /// that category's products. Categories are derived from the live product
@@ -16,6 +16,8 @@ class CategoriesPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final productsAsync = ref.watch(productsProvider);
+    final categoryImages =
+        ref.watch(categoryImagesProvider).valueOrNull ?? const {};
     final cart = ref.watch(cartProvider);
 
     return Scaffold(
@@ -77,21 +79,13 @@ class CategoriesPage extends ConsumerWidget {
                 crossAxisSpacing: 12,
                 childAspectRatio: 0.95,
               ),
-              itemCount: categories.length + 1,
+              itemCount: categories.length,
               itemBuilder: (context, index) {
-                if (index == 0) {
-                  return _CategoryCard(
-                    title: 'All Products',
-                    count: products.length,
-                    imageUrl: _firstImage(products),
-                    onTap: () => _openProducts(context, null),
-                  );
-                }
-                final category = categories[index - 1];
+                final category = categories[index];
                 return _CategoryCard(
                   title: category.name,
                   count: category.count,
-                  imageUrl: category.imageUrl,
+                  imageUrl: categoryImages[category.name.toLowerCase()],
                   onTap: () => _openProducts(context, category.name),
                 );
               },
@@ -117,19 +111,10 @@ class CategoriesPage extends ConsumerWidget {
       if (name.isEmpty) continue;
       final key = name.toLowerCase();
       final existing = byName[key];
-      if (existing == null) {
-        byName[key] = _CategoryInfo(
-          name: name,
-          count: 1,
-          imageUrl: _productImage(product),
-        );
-      } else {
-        byName[key] = _CategoryInfo(
-          name: existing.name,
-          count: existing.count + 1,
-          imageUrl: existing.imageUrl ?? _productImage(product),
-        );
-      }
+      byName[key] = _CategoryInfo(
+        name: existing?.name ?? name,
+        count: (existing?.count ?? 0) + 1,
+      );
     }
     final categories = byName.values.toList()
       ..sort(
@@ -137,31 +122,13 @@ class CategoriesPage extends ConsumerWidget {
       );
     return categories;
   }
-
-  String? _firstImage(List<Product> products) {
-    for (final product in products) {
-      final image = _productImage(product);
-      if (image != null) return image;
-    }
-    return null;
-  }
-
-  String? _productImage(Product product) {
-    final images = productImages(product);
-    return images.isEmpty ? null : images.first;
-  }
 }
 
 class _CategoryInfo {
-  const _CategoryInfo({
-    required this.name,
-    required this.count,
-    this.imageUrl,
-  });
+  const _CategoryInfo({required this.name, required this.count});
 
   final String name;
   final int count;
-  final String? imageUrl;
 }
 
 class _CategoryCard extends StatelessWidget {

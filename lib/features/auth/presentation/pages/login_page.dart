@@ -11,9 +11,6 @@ class LoginPage extends ConsumerStatefulWidget {
 
 class _LoginPageState extends ConsumerState<LoginPage> {
   final _formKey = GlobalKey<FormState>();
-  final _nameController = TextEditingController();
-  final _regionController = TextEditingController();
-  final _phoneController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isSignUp = false;
@@ -22,9 +19,6 @@ class _LoginPageState extends ConsumerState<LoginPage> {
 
   @override
   void dispose() {
-    _nameController.dispose();
-    _regionController.dispose();
-    _phoneController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
@@ -44,8 +38,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
           final action =
               ref.read(authActionControllerProvider.notifier).lastAction;
           final message = switch (action) {
-            AuthAction.signUp =>
-              'Account created. Your account is pending admin approval.',
+            AuthAction.signUp => 'Account created. Welcome!',
             AuthAction.passwordReset =>
               'Password reset email sent. Check your inbox.',
             _ => 'Logged in successfully.',
@@ -85,62 +78,11 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                     const SizedBox(height: 6),
                     Text(
                       _isSignUp
-                          ? 'Register with name, region, phone, email and password.'
+                          ? 'Register with email and password.'
                           : 'Login with email and password.',
                       style: const TextStyle(color: Color(0xFF6B7280)),
                     ),
                     const SizedBox(height: 18),
-                    if (_isSignUp) ...[
-                      TextFormField(
-                        controller: _nameController,
-                        textInputAction: TextInputAction.next,
-                        decoration: const InputDecoration(
-                          labelText: 'Name',
-                          prefixIcon: Icon(Icons.person_outline),
-                        ),
-                        validator: (value) {
-                          if (!_isSignUp) return null;
-                          if (value == null || value.trim().isEmpty) {
-                            return 'Name is required';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      TextFormField(
-                        controller: _regionController,
-                        textInputAction: TextInputAction.next,
-                        decoration: const InputDecoration(
-                          labelText: 'Region',
-                          prefixIcon: Icon(Icons.public_outlined),
-                        ),
-                        validator: (value) {
-                          if (!_isSignUp) return null;
-                          if (value == null || value.trim().isEmpty) {
-                            return 'Region is required';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      TextFormField(
-                        controller: _phoneController,
-                        keyboardType: TextInputType.phone,
-                        textInputAction: TextInputAction.next,
-                        decoration: const InputDecoration(
-                          labelText: 'Phone Number',
-                          prefixIcon: Icon(Icons.phone_outlined),
-                        ),
-                        validator: (value) {
-                          if (!_isSignUp) return null;
-                          final v = value?.trim() ?? '';
-                          if (v.isEmpty) return 'Phone number is required';
-                          if (v.length < 8) return 'Enter a valid phone number';
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                    ],
                     TextFormField(
                       controller: _emailController,
                       keyboardType: TextInputType.emailAddress,
@@ -298,9 +240,6 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       await ref
           .read(authActionControllerProvider.notifier)
           .signUp(
-            name: _nameController.text.trim(),
-            region: _regionController.text.trim(),
-            phone: _phoneController.text.trim(),
             email: _emailController.text.trim(),
             password: _passwordController.text,
           );
